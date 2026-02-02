@@ -69,39 +69,23 @@ export class CertificatesService {
       },
     });
 
-    if (!enrollment) {
-      throw new NotFoundException('Você não está matriculado neste curso.');
-    }
-
-    if (!enrollment.completedAt) {
-      throw new BadRequestException(
-        'Você ainda não concluiu 100% das aulas deste curso.',
-      );
-    }
+    if (!enrollment) throw new NotFoundException('Matrícula não encontrada.');
+    if (!enrollment.completedAt)
+      throw new BadRequestException('Curso não concluído.');
 
     // 2. Validar Existência da Prova
     const examId = enrollment.course.exam?.id;
-    if (!examId) {
-      throw new BadRequestException(
-        'Este curso não possui uma prova final configurada para emissão de certificado.',
-      );
-    }
+    if (!examId)
+      throw new BadRequestException('Este curso não possui prova configurada.');
 
     // 3. Validar Aprovação na Prova
     const bestAttempt = await this.prisma.studentExamAttempt.findFirst({
-      where: {
-        studentId,
-        examId,
-        passed: true,
-      },
+      where: { studentId, examId, passed: true },
       orderBy: { scorePercent: 'desc' },
     });
 
-    if (!bestAttempt) {
-      throw new BadRequestException(
-        'Certificado indisponível: Aluno não aprovado na prova final.',
-      );
-    }
+    if (!bestAttempt)
+      throw new BadRequestException('Aluno não aprovado na prova final.');
 
     // 4. Persistência
     const certificate = await this.prisma.certificate.upsert({
@@ -125,11 +109,10 @@ export class CertificatesService {
       select: { fullName: true, cpf: true },
     });
 
-    // =====================================================================
-    // TRATAMENTO DA IMAGEM (Usando process.cwd() para evitar erro de /dist)
-    // =====================================================================
+    // 6. Tratamento da Imagem (Ponto crítico do caminho)
     let logoBase64 = '';
     try {
+      // process.cwd() aponta para a raiz do projeto (onde fica o package.json)
       const imagePath = path.join(
         process.cwd(),
         'src',
@@ -141,25 +124,21 @@ export class CertificatesService {
       logoBase64 = `data:image/png;base64,${imageBuffer.toString('base64')}`;
     } catch (err) {
       this.logger.error(
-        `Não foi possível carregar a logo em: src/infra/images/image.png - ${err.message}`,
+        `Logo não encontrada em src/infra/images/image.png - Verifique o arquivo local.`,
       );
     }
 
-    // =====================================================================
-    // DADOS PARA O TEMPLATE
-    // =====================================================================
+    // 7. Preparação das Datas
     const conclusionDate = enrollment.completedAt;
     const startDate = new Date(conclusionDate);
     startDate.setDate(startDate.getDate() - 5);
-
     const expirationDate = new Date(conclusionDate);
     expirationDate.setFullYear(expirationDate.getFullYear() + 2);
 
-    // Módulos dinâmicos: removido o mock.
-    // O próximo desenvolvedor deve mapear os módulos do curso aqui.
+    // Módulos dinâmicos (Sem Mock)
     const modules: CertificateModule[] = [];
 
-    // Extrair número da NR automaticamente do título
+    // Extrair número da NR automaticamente
     const nrMatch = enrollment.course.title.match(/NR\s?(\d+)/i);
     const nrNumber = nrMatch ? nrMatch[1] : '35';
 
