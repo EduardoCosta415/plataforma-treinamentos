@@ -87,7 +87,7 @@ export class StudentsService {
 
     // matrícula opcional (se veio courseId)
     if (dto.courseId) {
-      await this.prisma.studentCourse.upsert({
+      await this.prisma.studentCourseEnrollment.upsert({
         where: {
           studentId_courseId: {
             studentId: student.id,
@@ -127,109 +127,94 @@ export class StudentsService {
    * - prova liberada quando 100% aulas concluídas
    */
   async getStudentCourses(studentId: string) {
-    // 1) cursos matriculados do aluno
-    const enrollments = await this.prisma.studentCourse.findMany({
+    // 1) Busca cursos matriculados JÁ INCLUINDO os dados do curso e da prova
+    const enrollments = await this.prisma.studentCourseEnrollment.findMany({
       where: { studentId },
-      include: { course: true },
-      orderBy: { createdAt: 'desc' },
+      // ✅ CORREÇÃO TS2322: Usar o campo de data correto da tabela de matrícula (geralmente enrolledAt)
+      orderBy: { enrolledAt: 'desc' },
+      include: {
+        // ✅ CORREÇÃO TS2551: Incluir o curso para poder acessar e.course depois
+        course: {
+          include: {
+            // Já buscamos se o curso tem prova ativa
+            exam: {
+              select: { id: true, title: true, isActive: true },
+            },
+          },
+        },
+      },
     });
 
     if (!enrollments.length) return [];
 
     const courseIds = enrollments.map((e) => e.courseId);
 
-    // 2) provas existentes desses cursos (1 por curso)
-    const exams = await this.prisma.exam.findMany({
-      where: { courseId: { in: courseIds } },
-      select: { id: true, courseId: true, title: true, isActive: true },
-    });
-
-    const examByCourse = new Map<
-      string,
-      { id: string; title: string; isActive: boolean }
-    >();
-
-    for (const ex of exams) {
-      examByCourse.set(ex.courseId, {
-        id: ex.id,
-        title: ex.title,
-        isActive: ex.isActive,
-      });
-    }
-
-    // 3) módulos desses cursos
+    // 2) Calcular TOTAL de aulas por curso (Lesson -> Module -> Course)
+    // Buscamos todos os módulos desses cursos e suas quantidades de aulas
     const modules = await this.prisma.module.findMany({
       where: { courseId: { in: courseIds } },
-      select: { id: true, courseId: true },
+      select: {
+        courseId: true,
+        _count: { select: { lessons: true } },
+      },
     });
 
-    const moduleToCourse = new Map<string, string>();
-    const moduleIds: string[] = [];
-
-    for (const m of modules) {
-      moduleToCourse.set(m.id, m.courseId);
-      moduleIds.push(m.id);
-    }
-
-    // 4) aulas desses módulos
-    const lessons = await this.prisma.lesson.findMany({
-      where: { moduleId: { in: moduleIds } },
-      select: { id: true, moduleId: true },
-    });
-
-    const lessonToCourse = new Map<string, string>();
+    // Mapa: CourseID -> Total Lessons
     const totalLessonsByCourse = new Map<string, number>();
-
-    for (const l of lessons) {
-      const courseId = moduleToCourse.get(l.moduleId);
-      if (!courseId) continue;
-
-      lessonToCourse.set(l.id, courseId);
-      totalLessonsByCourse.set(
-        courseId,
-        (totalLessonsByCourse.get(courseId) || 0) + 1,
-      );
+    for (const m of modules) {
+      const current = totalLessonsByCourse.get(m.courseId) || 0;
+      totalLessonsByCourse.set(m.courseId, current + m._count.lessons);
     }
 
-    // 5) progresso concluído do aluno
+    // 3) Calcular aulas CONCLUÍDAS pelo aluno (StudentLessonProgress -> Lesson -> Module -> Course)
     const progress = await this.prisma.studentLessonProgress.findMany({
-      where: { studentId, completed: true },
-      select: { lessonId: true },
+      where: {
+        studentId,
+        completed: true,
+        lesson: { module: { courseId: { in: courseIds } } },
+      },
+      select: {
+        lesson: {
+          select: { module: { select: { courseId: true } } },
+        },
+      },
     });
 
+    // Mapa: CourseID -> Completed Lessons
     const completedLessonsByCourse = new Map<string, number>();
-
     for (const p of progress) {
-      const courseId = lessonToCourse.get(p.lessonId);
-      if (!courseId) continue;
-
+      const cId = p.lesson.module.courseId;
       completedLessonsByCourse.set(
-        courseId,
-        (completedLessonsByCourse.get(courseId) || 0) + 1,
+        cId,
+        (completedLessonsByCourse.get(cId) || 0) + 1,
       );
     }
 
-    // 6) monta retorno
+    // 4) Monta retorno
     return enrollments.map((e) => {
-      const totalLessons = totalLessonsByCourse.get(e.courseId) || 0;
-      const completedLessons = completedLessonsByCourse.get(e.courseId) || 0;
+      // ✅ Agora e.course existe e está tipado corretamente
+      const course = e.course;
+      const exam = course.exam; // Prova vinda do include
+
+      const totalLessons = totalLessonsByCourse.get(course.id) || 0;
+      const completedLessons = completedLessonsByCourse.get(course.id) || 0;
 
       const progressPercent =
         totalLessons > 0
           ? Math.round((completedLessons / totalLessons) * 100)
           : 0;
 
-      const exam = examByCourse.get(e.courseId);
       const hasExam = !!exam && exam.isActive !== false;
 
       // ✅ regra de liberação da prova: terminou o curso (100% aulas)
-      const examUnlocked = hasExam && totalLessons > 0 && completedLessons >= totalLessons;
+      const examUnlocked =
+        hasExam && totalLessons > 0 && completedLessons >= totalLessons;
 
       return {
-        id: e.course.id,
-        title: e.course.title,
-        description: e.course.description,
-        imageUrl: e.course.imageUrl,
+        id: course.id,
+        title: course.title,
+        description: course.description,
+        imageUrl: course.imageUrl,
         totalLessons,
         completedLessons,
         progressPercent,
@@ -247,21 +232,18 @@ export class StudentsService {
       ALUNO - MINHAS PROVAS
   ========================= */
 
-  /**
-   * Lista provas do aluno com status:
-   * - unlocked: true se curso concluído (100%)
-   */
   async getStudentExams(studentId: string) {
+    // Reutiliza a lógica centralizada (que já está tipada corretamente agora)
     const courses = await this.getStudentCourses(studentId);
 
     return courses
-      .filter((c: any) => c.hasExam)
-      .map((c: any) => ({
+      .filter((c) => c.hasExam)
+      .map((c) => ({
         courseId: c.id,
         courseTitle: c.title,
         examId: c.examId,
         examTitle: c.examTitle,
-        unlocked: !!c.examUnlocked,
+        unlocked: c.examUnlocked,
         progressPercent: c.progressPercent,
       }));
   }
@@ -270,20 +252,13 @@ export class StudentsService {
       ALUNO - MEUS CERTIFICADOS
   ========================= */
 
-  /**
-   * ✅ Regra:
-   * - Certificado "LIBERADO" se existir registro em Certificate para (studentId, courseId)
-   * - Caso contrário: "BLOQUEADO" com motivo
-   *
-   * Observação:
-   * - Aqui NÃO depende de 100% aulas; depende de PASSAR na prova (porque o Certificate será criado no submit).
-   */
   async getStudentCertificates(studentId: string) {
     const courses = await this.getStudentCourses(studentId);
     if (!courses.length) return [];
 
-    const courseIds = courses.map((c: any) => c.id);
+    const courseIds = courses.map((c) => c.id);
 
+    // Busca certificados existentes
     const certs = await this.prisma.certificate.findMany({
       where: { studentId, courseId: { in: courseIds } },
       select: {
@@ -294,23 +269,15 @@ export class StudentsService {
       },
     });
 
-    const certByCourse = new Map<
-      string,
-      { id: string; scorePercent: number; issuedAt: Date }
-    >();
-
+    const certByCourse = new Map<string, (typeof certs)[0]>();
     for (const c of certs) {
-      certByCourse.set(c.courseId, {
-        id: c.id,
-        scorePercent: c.scorePercent,
-        issuedAt: c.issuedAt,
-      });
+      certByCourse.set(c.courseId, c);
     }
 
-    return courses.map((c: any) => {
+    return courses.map((c) => {
       const cert = certByCourse.get(c.id);
 
-      // curso sem prova
+      // 1. Curso sem prova = Bloqueado (ou lógica específica)
       if (!c.hasExam) {
         return {
           courseId: c.id,
@@ -324,7 +291,7 @@ export class StudentsService {
         };
       }
 
-      // certificado liberado
+      // 2. Certificado existe = Liberado
       if (cert) {
         return {
           courseId: c.id,
@@ -338,7 +305,7 @@ export class StudentsService {
         };
       }
 
-      // bloqueado (não passou ainda)
+      // 3. Caso contrário = Bloqueado (falta passar na prova)
       return {
         courseId: c.id,
         courseTitle: c.title,
@@ -353,7 +320,7 @@ export class StudentsService {
   }
 
   /**
-   * (Opcional) detalhe por curso — útil pra tela quando clicar em um curso
+   * Detalhe por curso
    */
   async getMyCertificateByCourse(studentId: string, courseId: string) {
     const cert = await this.prisma.certificate.findUnique({

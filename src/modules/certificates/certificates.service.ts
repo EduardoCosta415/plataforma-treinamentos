@@ -1,303 +1,211 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+  Logger,
+} from '@nestjs/common';
 import { PrismaService } from '../../infra/prisma/prisma.service';
-import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
-import * as fs from 'fs';
-import * as path from 'path';
+import { PdfGeneratorService } from '../../infra/pdf/pdf-generator.service';
+import {
+  buildCertificateHtml,
+  CertificateData,
+} from './templates/certificate-html.builder';
+import { format } from 'date-fns';
+import { ptBR } from 'date-fns/locale';
 
 @Injectable()
 export class CertificatesService {
-  constructor(private readonly prisma: PrismaService) {}
+  private readonly logger = new Logger(CertificatesService.name);
 
-  // ============================================================
-  // ✅ LISTA (com histórico)
-  // ============================================================
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly pdfGenerator: PdfGeneratorService,
+  ) {}
+
+  /**
+   * Lista certificados JÁ emitidos.
+   */
   async listByStudent(studentId: string) {
-    const items = await this.prisma.certificate.findMany({
+    const certificates = await this.prisma.certificate.findMany({
       where: { studentId },
-      orderBy: { issuedAt: 'desc' },
       include: {
-        course: {
-          select: {
-            id: true,
-            title: true,
-            exam: { select: { id: true } },
-          },
-        },
+        course: { select: { title: true } },
       },
+      orderBy: { issuedAt: 'desc' },
     });
-
-    const courseIds = items.map((c) => c.courseId);
-
-    // conclusão do curso (completedAt)
-    const enrollments = await this.prisma.studentCourseEnrollment.findMany({
-      where: { studentId, courseId: { in: courseIds } },
-      select: { courseId: true, completedAt: true },
-    });
-    const enrollmentMap = new Map(enrollments.map((e) => [e.courseId, e.completedAt]));
-
-    // tentativas por examId
-    const examIds = items.map((c) => c.course?.exam?.id).filter(Boolean) as string[];
-    const attempts = examIds.length
-      ? await this.prisma.studentExamAttempt.findMany({
-          where: { studentId, examId: { in: examIds } },
-          orderBy: [{ examId: 'asc' }, { attemptNumber: 'asc' }],
-          select: {
-            id: true,
-            examId: true,
-            attemptNumber: true,
-            scorePercent: true,
-            passed: true,
-            startedAt: true,
-            finishedAt: true,
-          },
-        })
-      : [];
-
-    const attemptsByExamId = new Map<string, typeof attempts>();
-    for (const a of attempts) {
-      const arr = attemptsByExamId.get(a.examId) ?? [];
-      arr.push(a);
-      attemptsByExamId.set(a.examId, arr);
-    }
 
     return {
       success: true,
-      data: items.map((c) => {
-        const examId = c.course?.exam?.id ?? null;
-        return {
-          id: c.id,
-          courseId: c.courseId,
-          courseTitle: c.course?.title ?? '',
-          scorePercent: c.scorePercent,
-          issuedAt: c.issuedAt,
-          attemptId: c.attemptId,
-
-          // ✅ histórico
-          courseCompletedAt: enrollmentMap.get(c.courseId) ?? null,
-          attempts: examId ? (attemptsByExamId.get(examId) ?? []) : [],
-        };
-      }),
+      data: certificates.map((c) => ({
+        id: c.id,
+        courseId: c.courseId,
+        courseTitle: c.course?.title,
+        scorePercent: c.scorePercent,
+        issuedAt: c.issuedAt,
+      })),
     };
   }
 
-  // ============================================================
-  // ✅ DETALHE (com histórico)
-  // ============================================================
-  async getByStudentAndCourse(studentId: string, courseId: string) {
-    const cert = await this.prisma.certificate.findUnique({
-      where: { studentId_courseId: { studentId, courseId } },
-      include: {
-        course: {
-          select: {
-            id: true,
-            title: true,
-            workloadHours: true,
-            exam: { select: { id: true, passScore: true } },
-            modules: { orderBy: { order: 'asc' }, select: { id: true, title: true, workloadHours: true, order: true } },
-          },
-        },
-        student: { select: { id: true, fullName: true, cpf: true } },
-      },
-    });
-
-    if (!cert) throw new NotFoundException('Certificado não encontrado para este curso');
-
+  /**
+   * Gera o PDF com verificação rígida de requisitos.
+   */
+  public async generateCertificateWithPuppeteer(
+    studentId: string,
+    courseId: string,
+  ): Promise<Buffer> {
+    // 1. Validar Matrícula e Dados do Curso
     const enrollment = await this.prisma.studentCourseEnrollment.findUnique({
       where: { studentId_courseId: { studentId, courseId } },
-      select: { completedAt: true },
+      include: {
+        course: {
+          select: {
+            title: true,
+            workloadHours: true,
+            // Precisamos saber se o curso TEM prova configurada
+            exam: { select: { id: true, passScore: true } },
+          },
+        },
+      },
     });
 
-    const examId = cert.course?.exam?.id ?? null;
+    if (!enrollment) {
+      throw new NotFoundException('Você não está matriculado neste curso.');
+    }
 
-    const attempts = examId
-      ? await this.prisma.studentExamAttempt.findMany({
-          where: { studentId, examId },
-          orderBy: { attemptNumber: 'asc' },
-          select: {
-            id: true,
-            attemptNumber: true,
-            scorePercent: true,
-            passed: true,
-            startedAt: true,
-            finishedAt: true,
-          },
-        })
-      : [];
+    if (!enrollment.completedAt) {
+      throw new BadRequestException(
+        'Você ainda não concluiu 100% das aulas deste curso.',
+      );
+    }
 
-    return {
-      success: true,
-      data: {
-        id: cert.id,
-        studentId: cert.studentId,
-        studentName: cert.student?.fullName ?? '',
-        studentCpf: cert.student?.cpf ?? '',
-        courseId: cert.courseId,
-        courseTitle: cert.course?.title ?? '',
-        scorePercent: cert.scorePercent,
-        issuedAt: cert.issuedAt,
-        attemptId: cert.attemptId,
+    // 2. Validar Existência da Prova
+    const examId = enrollment.course.exam?.id;
+    if (!examId) {
+      throw new BadRequestException(
+        'Este curso não possui uma prova final configurada para emissão de certificado.',
+      );
+    }
 
-        // ✅ histórico
-        courseCompletedAt: enrollment?.completedAt ?? null,
-        attempts,
-        modules: cert.course?.modules ?? [],
-        workloadHours: cert.course?.workloadHours ?? null,
+    // 3. Validar Aprovação na Prova
+    // Buscamos a MELHOR nota onde passed = true
+    const bestAttempt = await this.prisma.studentExamAttempt.findFirst({
+      where: {
+        studentId,
+        examId,
+        passed: true, // O banco SÓ retorna se passou
       },
-    };
-  }
+      orderBy: { scorePercent: 'desc' },
+    });
 
-  // ============================================================
-  // ✅ EMISSÃO IDPOTENTE (corrigida)
-  // ============================================================
-  async issueIfNotExists(params: {
-    studentId: string;
-    courseId: string;
-    attemptId?: string | null;
-    scorePercent: number;
-  }) {
-    const { studentId, courseId, attemptId, scorePercent } = params;
+    if (!bestAttempt) {
+      throw new BadRequestException(
+        'Certificado indisponível: Você concluiu as aulas, mas ainda não foi aprovado na prova final.',
+      );
+    }
 
-    return this.prisma.certificate.upsert({
+    // 4. Persistência (Garante que o registro do certificado existe)
+    // Se já existir, atualiza. Se não, cria.
+    const certificate = await this.prisma.certificate.upsert({
       where: { studentId_courseId: { studentId, courseId } },
       create: {
         studentId,
         courseId,
-        attemptId: attemptId ?? null,
-        scorePercent,
+        attemptId: bestAttempt.id,
+        scorePercent: bestAttempt.scorePercent,
         issuedAt: new Date(),
       },
       update: {
-        attemptId: attemptId ?? undefined,
-        scorePercent,
-        issuedAt: new Date(),
-      },
-    });
-  }
-
-  // ============================================================
-  // ✅ PDF (TEMPLATE)
-  // ============================================================
-  async generatePdfForStudentCourse(params: {
-    studentId: string;
-    courseId: string;
-    templateKey: 'NR33';
-  }): Promise<Uint8Array> {
-    const { studentId, courseId } = params;
-
-    const cert = await this.prisma.certificate.findUnique({
-      where: { studentId_courseId: { studentId, courseId } },
-      include: {
-        student: { select: { fullName: true, cpf: true } },
-        course: {
-          select: {
-            title: true,
-            workloadHours: true,
-            modules: {
-              orderBy: { order: 'asc' },
-              select: { title: true, workloadHours: true, order: true },
-            },
-          },
-        },
+        // Se o aluno fez a prova de novo e tirou nota maior, atualizamos
+        scorePercent: bestAttempt.scorePercent,
+        attemptId: bestAttempt.id,
       },
     });
 
-    if (!cert) throw new NotFoundException('Certificado não encontrado');
-
-    const studentName = cert.student?.fullName ?? '';
-    const studentCpf = cert.student?.cpf ?? '';
-    const courseTitle = cert.course?.title ?? '';
-
-    // ⚠️ caminho do template (deve existir)
-    const templatePath = path.resolve(
-      process.cwd(),
-      'src/assets/certificates/CERTIFICADO NR-33.pdf',
-    );
-    if (!fs.existsSync(templatePath)) {
-      throw new NotFoundException(`Template do certificado não encontrado: ${templatePath}`);
-    }
-
-    const templateBytes = fs.readFileSync(templatePath);
-    const pdfDoc = await PDFDocument.load(templateBytes);
-
-    const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
-    const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
-
-    const page1 = pdfDoc.getPages()[0];
-    const page2 = pdfDoc.getPages()[1];
-
-    // ===== PAGE 1 =====
-    this.drawText(page1, { text: studentName || '—', x: 170, y: 520, size: 14, font: fontBold });
-
-    this.drawText(page1, {
-      text: studentCpf ? `CPF: ${studentCpf}` : 'CPF: —',
-      x: 170,
-      y: 495,
-      size: 11,
-      font,
+    // 5. Buscar dados do Aluno para o PDF
+    const student = await this.prisma.student.findUnique({
+      where: { id: studentId },
+      select: { fullName: true, cpf: true },
     });
 
-    this.drawText(page1, { text: courseTitle || '—', x: 170, y: 468, size: 12, font: fontBold });
+    // =====================================================================
+    // MOCK DE DADOS (Layout Laena)
+    // =====================================================================
 
-    const issuedAt = cert.issuedAt ? new Date(cert.issuedAt) : new Date();
-    const issuedStr = this.formatDateBR(issuedAt);
+    const conclusionDate = enrollment.completedAt;
 
-    this.drawText(page1, { text: issuedStr, x: 430, y: 160, size: 10, font });
-    this.drawText(page1, { text: `Aproveitamento: ${cert.scorePercent}%`, x: 60, y: 160, size: 10, font });
+    // Data Início: 5 dias antes
+    const startDate = new Date(conclusionDate);
+    startDate.setDate(startDate.getDate() - 5);
 
-    // ===== PAGE 2 =====
-    const rows = this.buildModuleRows(cert.course?.modules ?? []);
+    // Validade: 2 anos depois
+    const expirationDate = new Date(conclusionDate);
+    expirationDate.setFullYear(expirationDate.getFullYear() + 2);
 
-    let startY = 620;
-    const rowHeight = 18;
+    const mockModules = [
+      {
+        name: 'I - Introdução à NR-35 e Conceitos Básicos',
+        score: 100,
+        hours: 5,
+        frequency: 100,
+        instructor: 'Jorgiano de Assis',
+      },
+      {
+        name: 'II - Análise de Risco e Condições Impeditivas',
+        score: 100,
+        hours: 5,
+        frequency: 100,
+        instructor: 'Jorgiano de Assis',
+      },
+      {
+        name: 'III - Equipamentos de Proteção e Sinalização',
+        score: 100,
+        hours: 10,
+        frequency: 100,
+        instructor: 'Jorgiano de Assis',
+      },
+      {
+        name: 'IV - Sistemas de Proteção Contra-Quedas',
+        score: 100,
+        hours: 10,
+        frequency: 100,
+        instructor: 'Jorgiano de Assis',
+      },
+      {
+        name: 'V - Fator de Queda, Riscos Potenciais',
+        score: 100,
+        hours: 10,
+        frequency: 100,
+        instructor: 'Jorgiano de Assis',
+      },
+      {
+        name: 'VI - Nó Utilizado em Acesso por Corda',
+        score: 100,
+        hours: 10,
+        frequency: 100,
+        instructor: 'Jorgiano de Assis',
+      },
+      {
+        name: 'VII - Emergência e Primeiros Socorros',
+        score: 100,
+        hours: 10,
+        frequency: 100,
+        instructor: 'Jorgiano de Assis',
+      },
+    ];
 
-    for (let i = 0; i < rows.length; i++) {
-      const r = rows[i];
-      const y = startY - i * rowHeight;
-      if (y < 120) break;
+    const templateData: CertificateData = {
+      studentName: student?.fullName ?? 'Aluno',
+      studentCpf: student?.cpf ?? '000.000.000-00',
+      courseTitle: enrollment.course.title,
+      workloadHours: enrollment.course.workloadHours || 60,
+      verificationCode: certificate.id,
+      startDate: format(startDate, 'dd/MM/yyyy'),
+      endDate: format(conclusionDate, 'dd/MM/yyyy'),
+      expirationDate: format(expirationDate, 'dd/MM/yyyy'),
+      modules: mockModules,
+    };
 
-      this.drawText(page2, { text: r.title, x: 60, y, size: 10, font });
-      this.drawText(page2, { text: `${r.hours} H`, x: 430, y, size: 10, font });
-      this.drawText(page2, { text: r.instructor || '', x: 500, y, size: 10, font });
-    }
-
-    const totalHours =
-      typeof cert.course?.workloadHours === 'number'
-        ? cert.course.workloadHours
-        : rows.reduce((sum, r) => sum + r.hours, 0);
-
-    this.drawText(page2, {
-      text: `CARGA HORÁRIA TOTAL DE ${totalHours} HORAS`,
-      x: 60,
-      y: 85,
-      size: 12,
-      font: fontBold,
-    });
-
-    return await pdfDoc.save();
-  }
-
-  // ============================================================
-  // Helpers
-  // ============================================================
-  private drawText(page: any, params: { text: string; x: number; y: number; size: number; font: any }) {
-    page.drawText(params.text, { x: params.x, y: params.y, size: params.size, font: params.font, color: rgb(0, 0, 0) });
-  }
-
-  private formatDateBR(d: Date) {
-    const dd = String(d.getDate()).padStart(2, '0');
-    const mm = String(d.getMonth() + 1).padStart(2, '0');
-    const yyyy = d.getFullYear();
-    return `${dd}/${mm}/${yyyy}`;
-  }
-
-  private buildModuleRows(modules: any[]): { title: string; hours: number; instructor?: string }[] {
-    return modules.map((m) => {
-      const hours = Number(m.workloadHours ?? 0);
-      return {
-        title: String(m.title ?? 'Módulo'),
-        hours: isFinite(hours) ? hours : 0,
-        instructor: String(m.instructorName ?? ''),
-      };
-    });
+    const html = buildCertificateHtml(templateData);
+    return this.pdfGenerator.generateFromHtml(html);
   }
 }

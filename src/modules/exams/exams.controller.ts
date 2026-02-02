@@ -1,4 +1,13 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Patch,
+  Post,
+  UseGuards,
+} from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { Roles } from '../auth/roles.decorator';
 import { RolesGuard } from '../auth/roles.guards';
@@ -47,12 +56,18 @@ export class ExamsController {
   // =========================
 
   @Post(':id/questions')
-  addQuestion(@Param('id') examId: string, @Body() dto: AdminUpsertQuestionDto) {
+  addQuestion(
+    @Param('id') examId: string,
+    @Body() dto: AdminUpsertQuestionDto,
+  ) {
     return this.exams.addQuestion(examId, dto);
   }
 
   @Patch('questions/:questionId')
-  updateQuestion(@Param('questionId') questionId: string, @Body() dto: AdminUpsertQuestionDto) {
+  updateQuestion(
+    @Param('questionId') questionId: string,
+    @Body() dto: AdminUpsertQuestionDto,
+  ) {
     return this.exams.updateQuestion(questionId, dto);
   }
 

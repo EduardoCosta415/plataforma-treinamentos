@@ -10,7 +10,7 @@ export class EnrollmentsService {
    * - idempotente (não duplica)
    */
   async enroll(studentId: string, courseId: string) {
-    return this.prisma.studentCourse.upsert({
+    return this.prisma.studentCourseEnrollment.upsert({
       where: {
         studentId_courseId: { studentId, courseId },
       },
@@ -26,7 +26,7 @@ export class EnrollmentsService {
    * Remove matrícula (desmatricular)
    */
   async remove(studentId: string, courseId: string) {
-    return this.prisma.studentCourse.delete({
+    return this.prisma.studentCourseEnrollment.delete({
       where: {
         studentId_courseId: { studentId, courseId },
       },

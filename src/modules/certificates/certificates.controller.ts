@@ -3,54 +3,67 @@ import {
   Get,
   Param,
   Req,
+  Res,
   UseGuards,
   ForbiddenException,
-  Res,
+  Logger,
 } from '@nestjs/common';
 import { Request, Response } from 'express';
 import { AuthGuard } from '@nestjs/passport';
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { CertificatesService } from './certificates.service';
 
 type JwtUser = { sub: string; role?: string };
 
+@ApiTags('Certificados (Aluno)')
+@ApiBearerAuth()
 @Controller('students/me/certificates')
 @UseGuards(AuthGuard('jwt'))
 export class CertificatesController {
+  private readonly logger = new Logger(CertificatesController.name);
+
   constructor(private readonly service: CertificatesService) {}
 
   private getStudentId(req: Request): string {
     const user = req.user as JwtUser | undefined;
-    if (!user?.sub) throw new ForbiddenException('Usuário não autenticado');
+    if (!user?.sub) {
+      throw new ForbiddenException('Usuário não identificado no token.');
+    }
     return user.sub;
   }
 
   @Get()
   async listMyCertificates(@Req() req: Request) {
-    return this.service.listByStudent(this.getStudentId(req));
+    const studentId = this.getStudentId(req);
+    return this.service.listByStudent(studentId);
   }
 
-  @Get(':courseId')
-  async getMyCertificateByCourse(@Req() req: Request, @Param('courseId') courseId: string) {
-    return this.service.getByStudentAndCourse(this.getStudentId(req), courseId);
-  }
-
-  // ✅ PDF FINAL (igual ao template)
-  @Get(':courseId/pdf')
-  async downloadMyCertificatePdf(
+  @Get(':courseId/download')
+  async downloadCertificate(
     @Req() req: Request,
     @Param('courseId') courseId: string,
     @Res() res: Response,
   ) {
     const studentId = this.getStudentId(req);
 
-    const pdfBytes = await this.service.generatePdfForStudentCourse({
+    this.logger.log(
+      `📥 Download solicitado: Aluno [${studentId}] - Curso [${courseId}]`,
+    );
+
+    const pdfBuffer = await this.service.generateCertificateWithPuppeteer(
       studentId,
       courseId,
-      templateKey: 'NR33', // você pode mudar isso por curso depois
+    );
+
+    res.set({
+      'Content-Type': 'application/pdf',
+      'Content-Disposition': `inline; filename="certificado-${courseId}.pdf"`,
+      'Content-Length': pdfBuffer.length,
+      'Cache-Control': 'no-cache, no-store, must-revalidate',
+      Pragma: 'no-cache',
+      Expires: '0',
     });
 
-    res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `inline; filename="certificado-${courseId}.pdf"`);
-    return res.send(Buffer.from(pdfBytes));
+    res.send(pdfBuffer);
   }
 }

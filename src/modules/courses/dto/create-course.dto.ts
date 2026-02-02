@@ -1,38 +1,26 @@
+import { ApiProperty } from '@nestjs/swagger';
 import { IsOptional, IsString, MinLength, IsUrl } from 'class-validator';
 
-/**
- * DTO = Data Transfer Object
- *
- * Define e valida o formato do BODY
- * recebido ao criar um curso.
- *
- * ✔ Segurança
- * ✔ Padronização
- * ✔ Clareza de contrato entre front e back
- */
 export class CreateCourseDto {
-  /**
-   * Título do curso
-   * Ex: "Angular Completo"
-   */
+  @ApiProperty({ description: 'Título do curso', example: 'NR-33 Espaços Confinados' })
   @IsString()
   @MinLength(3)
   title: string;
 
-  /**
-   * Descrição opcional do curso
-   */
+  @ApiProperty({
+    description: 'Descrição detalhada do curso',
+    example: 'Este curso aborda os requisitos de segurança para trabalhos em espaços confinados.',
+    required: false,
+  })
   @IsOptional()
   @IsString()
   description?: string;
 
-  /**
-   * URL da imagem de capa do curso
-   * (usada para visualização no front)
-   *
-   * Por enquanto usamos URL externa.
-   * No futuro isso pode virar upload.
-   */
+  @ApiProperty({
+    description: 'URL da imagem de capa do curso',
+    example: 'https://example.com/images/nr33.jpg',
+    required: false,
+  })
   @IsOptional()
   @IsUrl()
   imageUrl?: string;

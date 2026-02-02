@@ -3,6 +3,7 @@ import { PrismaClient } from '@prisma/client';
 
 @Injectable()
 export class PrismaService extends PrismaClient implements OnModuleInit {
+  // Added this comment to trigger a recompile and refresh TypeScript types
   async onModuleInit() {
     await this.$connect();
   }

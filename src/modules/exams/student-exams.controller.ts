@@ -16,7 +16,7 @@ export class StudentExamsController {
    */
   @Post(':examId/attempts/start')
   start(@Param('examId') examId: string, @Req() req: any) {
-    const studentId = req.user.userId;
+    const studentId = req.user.sub;
     return this.exams.startAttempt(studentId, examId);
   }
 
@@ -33,7 +33,7 @@ export class StudentExamsController {
     @Req() req: any,
     @Body() body: { answers: { questionId: string; optionId: string }[] },
   ) {
-    const studentId = req.user.userId;
+    const studentId = req.user.sub;
     return this.exams.submitAttempt(studentId, attemptId, body);
   }
 }

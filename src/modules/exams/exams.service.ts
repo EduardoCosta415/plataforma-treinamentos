@@ -2,6 +2,7 @@ import {
   BadRequestException,
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from '../../infra/prisma/prisma.service';
@@ -14,6 +15,8 @@ type SubmitAttemptDto = { answers: StudentAnswerDto[] };
 
 @Injectable()
 export class ExamsService {
+  private readonly logger = new Logger(ExamsService.name);
+
   constructor(private readonly prisma: PrismaService) {}
 
   // =========================================================
@@ -307,7 +310,8 @@ export class ExamsService {
       throw new BadRequestException('Esta tentativa já foi finalizada');
     }
     if (!attempt.exam) throw new BadRequestException('Prova inválida');
-    if (!attempt.exam.isActive) throw new BadRequestException('Prova desativada');
+    if (!attempt.exam.isActive)
+      throw new BadRequestException('Prova desativada');
 
     // ✅ se já passou em outra tentativa, bloqueia submit
     const alreadyPassed = await this.prisma.studentExamAttempt.findFirst({
@@ -368,6 +372,10 @@ export class ExamsService {
     const scorePercent = total > 0 ? Math.round((correct / total) * 100) : 0;
     const passed = scorePercent >= this.PASS_SCORE_PERCENT;
 
+    this.logger.log(
+      `[Attempt Submition] AttemptId: ${attemptId}, Score: ${scorePercent}%, Passed: ${passed}`,
+    );
+
     const courseId = attempt.exam.courseId;
 
     const updatedAttempt = await this.prisma.$transaction(async (tx) => {
@@ -401,6 +409,9 @@ export class ExamsService {
       // - Se passou, garante 1 por aluno+curso
       // - Usa attemptId para rastrear qual tentativa gerou
       if (passed) {
+        this.logger.log(
+          `[Certificate] Issuing certificate for Student ${studentId} in Course ${courseId}`,
+        );
         await tx.certificate.upsert({
           where: {
             studentId_courseId: { studentId, courseId },

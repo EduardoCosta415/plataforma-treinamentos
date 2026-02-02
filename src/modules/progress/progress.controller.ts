@@ -1,7 +1,16 @@
-import { Body, Controller, Get, Param, Post, Req, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Post,
+  Req,
+  UseGuards,
+} from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { ProgressService } from './progress.service';
 import { IsNumber, IsString } from 'class-validator';
+import { CurrentUser } from '../auth/decorators/current-user.decorator';
 
 class WatchLessonDto {
   @IsString()
@@ -41,8 +50,14 @@ export class ProgressController {
    * Retorna árvore do curso + locked/completed por aula (do aluno logado)
    */
   @Get('me/course/:courseId')
-  myCourse(@Req() req: any, @Param('courseId') courseId: string) {
-    return this.progress.getMyCourseProgress(req.user.userId, courseId);
+  myCourse(
+    @CurrentUser('sub') studentId: string,
+    @Req() req: any,
+    @Param('courseId') courseId: string,
+  ) {
+    console.log(`User : ${req.user}`);
+
+    return this.progress.getMyCourseProgress(studentId, courseId);
   }
 
   /**
@@ -50,19 +65,17 @@ export class ProgressController {
    * Heartbeat do player (salva watchedSeconds/lastPosition)
    */
   @Post('me/watch')
-  watch(@Req() req: any, @Body() dto: WatchLessonDto) {
-    return this.progress.watchMyLesson(req.user.userId, dto);
+  watch(@CurrentUser('sub') studentId: string, @Body() dto: WatchLessonDto) {
+    return this.progress.watchMyLesson(studentId, dto);
   }
 
-  /**
-   * POST /progress/me/complete
-   * Conclui aula do aluno logado (e tenta fechar o curso ao final)
-   */
   @Post('me/complete')
-  completeMe(@Req() req: any, @Body() dto: CompleteLessonDto) {
-    return this.progress.completeMyLesson(req.user.userId, dto.lessonId);
+  completeMe(
+    @CurrentUser('sub') studentId: string,
+    @Body() dto: CompleteLessonDto,
+  ) {
+    return this.progress.completeMyLesson(studentId, dto.lessonId);
   }
-
   // ============================================================
   // ✅ ADMIN/MANAGER (studentId explícito) - opcional manter
   // ============================================================

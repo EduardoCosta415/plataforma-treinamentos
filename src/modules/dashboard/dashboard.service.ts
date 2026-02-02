@@ -57,7 +57,20 @@ export class DashboardService {
       ORDER BY 1 ASC
     `;
 
-    const monthNames = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+    const monthNames = [
+      'Jan',
+      'Fev',
+      'Mar',
+      'Abr',
+      'Mai',
+      'Jun',
+      'Jul',
+      'Ago',
+      'Set',
+      'Out',
+      'Nov',
+      'Dez',
+    ];
 
     return rows.map((r) => {
       const d = new Date(r.month);
@@ -80,7 +93,12 @@ export class DashboardService {
    */
   async getCourseProgress(limit: number) {
     const rows = await this.prisma.$queryRaw<
-      Array<{ courseId: string; title: string; total: number; completed: number }>
+      Array<{
+        courseId: string;
+        title: string;
+        total: number;
+        completed: number;
+      }>
     >`
       WITH lessons_per_course AS (
         SELECT
@@ -96,7 +114,7 @@ export class DashboardService {
         SELECT
           sc."courseId" AS "courseId",
           COUNT(DISTINCT sc."studentId")::int AS "enrolledCount"
-        FROM "StudentCourse" sc
+        FROM "StudentCourseEnrollment" sc
         GROUP BY sc."courseId"
       ),
       completed_per_course AS (
