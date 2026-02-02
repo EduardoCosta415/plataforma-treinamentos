@@ -1,36 +1,44 @@
 export interface CertificateModule {
   name: string;
-  score: number; // Aproveitamento
-  hours: number;
-  frequency: number;
-  instructor: string;
+  score?: number; // Opcional
+  hours?: number; // Opcional
+  frequency?: number; // Opcional
+  instructorName?: string;
+  instructorCrea?: string;
 }
 
 export interface CertificateData {
   studentName: string;
-  studentCpf: string; // Adicionado conforme a foto
-  courseTitle: string; // Ex: NR 35 - TRABALHO EM ALTURA
-  startDate: string; // Adicionado
-  endDate: string; // Adicionado
-  expirationDate: string; // Validade
+  studentCpf: string;
+  courseTitle: string;
+  nrNumber: string;
+  startDate: string;
+  endDate: string;
+  expirationDate: string;
   workloadHours: number;
   verificationCode: string;
-
-  // Dados do Verso
   modules: CertificateModule[];
+  logoBase64?: string;
 }
 
 export const buildCertificateHtml = (data: CertificateData): string => {
-  // Gera as linhas da tabela dinamicamente
-  const tableRows = data.modules
+  // Gera as linhas apenas se houver módulos, caso contrário deixa a tabela limpa
+  const tableRows = (data.modules || [])
     .map(
       (m) => `
     <tr>
-      <td style="text-align: left; padding-left: 10px;">${m.name}</td>
-      <td>${m.score}%</td>
-      <td>${m.hours}</td>
-      <td>${m.frequency.toFixed(2)}%</td>
-      <td>${m.instructor}</td>
+      <td style="text-align: left; padding-left: 10px;">${m.name || '---'}</td>
+      <td>${m.score !== undefined ? `${m.score}%` : '---'}</td>
+      <td>${m.hours !== undefined ? `${m.hours}h` : '---'}</td>
+      <td>${
+        m.frequency !== undefined ? `${m.frequency.toFixed(2)}%` : '---'
+      }</td>
+      <td>
+        ${m.instructorName || '---'}
+        ${
+          m.instructorCrea ? `<br><small>CREA: ${m.instructorCrea}</small>` : ''
+        }
+      </td>
     </tr>
   `,
     )
@@ -42,313 +50,90 @@ export const buildCertificateHtml = (data: CertificateData): string => {
     <head>
       <meta charset="UTF-8">
       <style>
-        /* ================= RESET & CONFIGURAÇÃO GERAL ================= */
         @import url('https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;600;700;800&display=swap');
-        
-        body { 
-          margin: 0; 
-          padding: 0; 
-          font-family: 'Open Sans', sans-serif; 
-          -webkit-print-color-adjust: exact; 
-          print-color-adjust: exact; 
-        }
-
-        /* Configuração da Página A4 Paisagem (Puppeteer) */
-        .page {
-          width: 1123px; /* A4 Paisagem em 96dpi aprox */
-          height: 794px;
-          position: relative;
-          background: white;
-          overflow: hidden;
-          page-break-after: always; /* Força nova página para o verso */
-          display: flex;
-          flex-direction: column;
-        }
-
-        .page:last-child {
-          page-break-after: avoid;
-        }
-
-        /* Cores Baseadas nas Fotos */
-        :root {
-          --gold-light: #F0E68C;
-          --gold-main: #D4AF37;
-          --gold-dark: #B8860B;
-          --brown-text: #5D4037;
-        }
-
-        /* ================= ELEMENTOS DECORATIVOS (CURVAS) ================= */
-        .curve-top-right {
-          position: absolute;
-          top: -100px;
-          right: -100px;
-          width: 400px;
-          height: 400px;
-          background: linear-gradient(135deg, #fff 40%, var(--gold-main) 40%, var(--brown-text) 100%);
-          border-radius: 50%;
-          z-index: 0;
-          opacity: 0.9;
-          box-shadow: -5px 5px 15px rgba(0,0,0,0.2);
-        }
-
-        .curve-bottom-left {
-          position: absolute;
-          bottom: -150px;
-          left: -100px;
-          width: 500px;
-          height: 500px;
-          background: linear-gradient(45deg, var(--gold-main) 0%, #fff 60%);
-          border-radius: 50%;
-          z-index: 0;
-          border: 20px solid var(--gold-dark);
-        }
-        
-        /* Curva específica do verso (canto inferior direito) */
-        .curve-bottom-right {
-          position: absolute;
-          bottom: -100px;
-          right: -100px;
-          width: 300px;
-          height: 300px;
-          background: linear-gradient(135deg, #fff 30%, var(--gold-light) 100%);
-          border-radius: 50%;
-          border-left: 15px solid var(--gold-main);
-          z-index: 0;
-        }
-
-        /* ================= CONTEÚDO DA FRENTE ================= */
-        .front-container {
-          padding: 60px 80px;
-          position: relative;
-          z-index: 1; /* Fica acima das curvas */
-          height: 100%;
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-        }
-
-        /* Badge NR-35 (Amarelo) */
-        .nr-badge {
-          position: absolute;
-          top: 50px;
-          left: 50px;
-          width: 100px;
-          height: 100px;
-          background: yellow;
-          transform: rotate(45deg);
-          border: 3px solid black;
-          border-radius: 10px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          box-shadow: 2px 2px 5px rgba(0,0,0,0.2);
-        }
-        .nr-badge span {
-          transform: rotate(-45deg);
-          font-weight: 800;
-          font-size: 24px;
-          text-align: center;
-          line-height: 1;
-          color: red;
-        }
-
-        /* Logo Central */
-        .logo-header {
-          text-align: center;
-          margin-bottom: 20px;
-        }
-        .logo-placeholder {
-          font-family: serif;
-          font-size: 40px;
-          color: var(--gold-dark);
-          text-transform: uppercase;
-          letter-spacing: 5px;
-        }
-
-        h1.cert-title {
-          font-size: 64px;
-          font-weight: 800;
-          margin: 10px 0 40px 0;
-          color: #000;
-        }
-
-        .cert-body {
-          font-size: 20px;
-          line-height: 1.6;
-          text-align: justify;
-          color: #333;
-          width: 90%;
-        }
-
-        .bold {
-          font-weight: 700;
-          color: #000;
-        }
-
-        /* Assinaturas */
-        .signatures {
-          margin-top: auto; /* Empurra para baixo */
-          margin-bottom: 40px;
-          width: 100%;
-          display: flex;
-          justify-content: space-between;
-          padding: 0 50px;
-        }
-
-        .sig-block {
-          text-align: center;
-          width: 40%;
-        }
-
-        .sig-line {
-          border-top: 2px solid #000;
-          margin-bottom: 10px;
-        }
-
-        .sig-role {
-          font-weight: 700;
-          font-size: 16px;
-          text-transform: uppercase;
-        }
-
-        /* ================= CONTEÚDO DO VERSO ================= */
-        .back-container {
-          padding: 40px 50px;
-          position: relative;
-          z-index: 1;
-        }
-
-        .watermark {
-          position: absolute;
-          top: 50%;
-          left: 50%;
-          transform: translate(-50%, -50%);
-          font-size: 150px;
-          opacity: 0.05;
-          font-weight: 900;
-          color: var(--gold-dark);
-          z-index: 0;
-          pointer-events: none;
-        }
-
-        .back-header {
-          font-size: 18px;
-          font-weight: 800;
-          margin-bottom: 20px;
-          text-transform: uppercase;
-        }
-
-        table {
-          width: 100%;
-          border-collapse: collapse;
-          font-size: 12px;
-          z-index: 2;
-          background: rgba(255,255,255,0.8); /* Leve fundo branco para ler sobre marca d'agua */
-        }
-
-        th, td {
-          border: 1px solid #ccc;
-          padding: 8px 5px;
-          text-align: center;
-        }
-
-        th {
-          background-color: #fff;
-          font-weight: 800;
-          text-transform: uppercase;
-          font-size: 11px;
-        }
-
-        td {
-          font-weight: 600;
-          color: #333;
-        }
-
-        /* Zebra striping sutil */
-        tr:nth-child(even) {
-          background-color: #fcfcfc;
-        }
-
+        body { margin: 0; padding: 0; font-family: 'Open Sans', sans-serif; -webkit-print-color-adjust: exact; }
+        .page { width: 1123px; height: 794px; position: relative; background: white; overflow: hidden; page-break-after: always; display: flex; flex-direction: column; }
+        :root { --gold-main: #D4AF37; --gold-dark: #B8860B; --brown-text: #5D4037; }
+        .curve-top-right { position: absolute; top: -80px; right: -80px; width: 350px; height: 350px; background: linear-gradient(135deg, #fff 30%, var(--gold-main) 60%, var(--brown-text) 100%); border-radius: 50%; z-index: 0; }
+        .curve-bottom-left { position: absolute; bottom: -120px; left: -80px; width: 400px; height: 400px; background: linear-gradient(45deg, var(--gold-main) 0%, #fff 70%); border-radius: 50%; z-index: 0; border: 15px solid var(--gold-dark); }
+        .nr-badge { position: absolute; top: 60px; left: 60px; width: 120px; height: 120px; background: #FFD700; transform: rotate(45deg); border: 4px solid #000; border-radius: 8px; display: flex; align-items: center; justify-content: center; z-index: 2; }
+        .nr-badge-content { transform: rotate(-45deg); font-weight: 900; font-size: 28px; text-align: center; color: #000; line-height: 1; }
+        .nr-badge-content small { font-size: 14px; display: block; }
+        .front-container { padding: 40px 80px; position: relative; z-index: 1; height: 100%; display: flex; flex-direction: column; align-items: center; }
+        .logo-img { height: 180px; width: auto; margin-bottom: 0px; }
+        h1.cert-title { font-size: 72px; font-weight: 800; margin: 0px 0 30px 0; color: #000; text-transform: uppercase; letter-spacing: 2px; }
+        .cert-body { font-size: 22px; line-height: 1.6; text-align: center; color: #333; width: 85%; }
+        .bold { font-weight: 800; color: #000; }
+        .signatures { margin-top: auto; margin-bottom: 50px; width: 100%; display: flex; justify-content: space-around; }
+        .sig-block { text-align: center; width: 35%; }
+        .sig-line { border-top: 1.5px solid #000; margin-bottom: 8px; }
+        .sig-role { font-weight: 700; font-size: 14px; text-transform: uppercase; color: #444; }
+        .back-container { padding: 60px 50px; position: relative; z-index: 1; }
+        .watermark { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 120px; opacity: 0.04; font-weight: 900; color: var(--gold-dark); z-index: 0; pointer-events: none; }
+        table { width: 100%; border-collapse: collapse; font-size: 13px; background: rgba(255,255,255,0.9); }
+        th, td { border: 1px solid #999; padding: 12px 8px; text-align: center; }
+        th { background-color: #f2f2f2; font-weight: 800; text-transform: uppercase; }
+        .footer-info { margin-top: 40px; font-size: 11px; color: #777; text-align: center; border-top: 1px dashed #ccc; padding-top: 10px; }
       </style>
     </head>
     <body>
-
       <div class="page">
         <div class="curve-top-right"></div>
         <div class="curve-bottom-left"></div>
-        
-        <div class="nr-badge">
-          <span>NR<br>35</span>
-        </div>
-
+        <div class="nr-badge"><div class="nr-badge-content"><small>NR</small>${
+          data.nrNumber
+        }</div></div>
         <div class="front-container">
-          <div class="logo-header">
-            <div style="font-size: 40px; margin-bottom: 5px;">👷</div> 
-            <div class="logo-placeholder">LAENA</div>
-          </div>
-
+          <img src="${data.logoBase64}" class="logo-img" alt="Logo">
           <h1 class="cert-title">Certificado</h1>
-
           <div class="cert-body">
             Certificamos que <span class="bold">${data.studentName.toUpperCase()}</span>, 
-            CPF nº <span class="bold">${data.studentCpf}</span>, 
-            participou do treinamento <span class="bold">${data.courseTitle.toUpperCase()}</span>, 
-            realizado de ${data.startDate} a ${
-    data.endDate
-  }, com validade de 2 anos.
+            portador(a) do CPF nº <span class="bold">${data.studentCpf}</span>, 
+            concluiu com êxito o treinamento de <span class="bold">${data.courseTitle.toUpperCase()}</span>, 
+            realizado no período de ${data.startDate} a ${data.endDate}, 
+            com carga horária total de <span class="bold">${
+              data.workloadHours
+            } horas</span>.
             <br><br>
-            Curso realizado pela <span class="bold">LAENA - Centro de Treinamento e Capacitação de Segurança do Trabalho EAD Ltda</span>, 
-            inscrito no CNPJ sob nº 59.182.033/0001-42, com sede na Rua Uberlândia, nº 252, Sala 307, Centro, Ipatinga/MG – CEP 35160-024.
+            Treinamento realizado pela <span class="bold">LAENA - Centro de Treinamento e Capacitação de Segurança do Trabalho EAD Ltda</span>, 
+            CNPJ 59.182.033/0001-42, sediada na Rua Uberlândia, nº 252, Sala 307, Centro, Ipatinga/MG.
           </div>
-
           <div class="signatures">
-            <div class="sig-block">
-              <div class="sig-line"></div>
-              <div class="sig-role">Diretora Geral</div>
-            </div>
-            <div class="sig-block">
-              <div class="sig-line"></div>
-              <div class="sig-role">Eng Responsável</div>
-            </div>
+            <div class="sig-block"><div class="sig-line"></div><div class="sig-role">Diretora Geral</div></div>
+            <div class="sig-block"><div class="sig-line"></div><div class="sig-role">Engenheiro(a) Responsável</div></div>
           </div>
         </div>
       </div>
-
       <div class="page">
-        <div class="curve-bottom-right"></div>
-        
         <div class="watermark">LAENA</div>
-
         <div class="back-container">
-          <div class="back-header">CARGA HORÁRIA TOTAL DE ${
-            data.workloadHours
-          } HORAS</div>
-
+          <h2 style="text-align: center; margin-bottom: 30px; color: var(--brown-text);">CONTEÚDO PROGRAMÁTICO</h2>
           <table>
             <thead>
               <tr>
-                <th style="width: 40%; text-align: left; padding-left: 10px;">DISCIPLINAS (MÓDULOS)</th>
-                <th style="width: 15%;">APROVEITAMENTO</th>
-                <th style="width: 15%;">CARGA HORÁRIA</th>
-                <th style="width: 15%;">FREQUÊNCIA</th>
-                <th style="width: 15%;">INSTRUTOR</th>
+                <th style="width: 45%; text-align: left; padding-left: 15px;">Módulos do Treinamento</th>
+                <th style="width: 12%;">Aproveitamento</th>
+                <th style="width: 13%;">Carga Horária</th>
+                <th style="width: 10%;">Frequência</th>
+                <th style="width: 20%;">Instrutor</th>
               </tr>
             </thead>
             <tbody>
-              ${tableRows}
+              ${
+                tableRows ||
+                '<tr><td colspan="5">Nenhum módulo registrado.</td></tr>'
+              }
             </tbody>
           </table>
-          
-          <div style="margin-top: 30px; font-size: 10px; color: #666; text-align: center;">
-            Certificado ID: ${
+          <div class="footer-info">
+            Código de Autenticidade: <strong>${
               data.verificationCode
-            } • Gerado eletronicamente em ${new Date().toLocaleDateString(
+            }</strong> • Documento gerado em ${new Date().toLocaleDateString(
     'pt-BR',
   )}
           </div>
         </div>
       </div>
-
     </body>
     </html>
   `;
