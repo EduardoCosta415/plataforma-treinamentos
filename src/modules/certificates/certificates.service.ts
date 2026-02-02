@@ -9,9 +9,11 @@ import { PdfGeneratorService } from '../../infra/pdf/pdf-generator.service';
 import {
   buildCertificateHtml,
   CertificateData,
+  CertificateModule,
 } from './templates/certificate-html.builder';
 import { format } from 'date-fns';
-import { ptBR } from 'date-fns/locale';
+import * as fs from 'fs';
+import * as path from 'path';
 
 @Injectable()
 export class CertificatesService {
@@ -61,7 +63,6 @@ export class CertificatesService {
           select: {
             title: true,
             workloadHours: true,
-            // Precisamos saber se o curso TEM prova configurada
             exam: { select: { id: true, passScore: true } },
           },
         },
@@ -87,24 +88,22 @@ export class CertificatesService {
     }
 
     // 3. Validar Aprovação na Prova
-    // Buscamos a MELHOR nota onde passed = true
     const bestAttempt = await this.prisma.studentExamAttempt.findFirst({
       where: {
         studentId,
         examId,
-        passed: true, // O banco SÓ retorna se passou
+        passed: true,
       },
       orderBy: { scorePercent: 'desc' },
     });
 
     if (!bestAttempt) {
       throw new BadRequestException(
-        'Certificado indisponível: Você concluiu as aulas, mas ainda não foi aprovado na prova final.',
+        'Certificado indisponível: Aluno não aprovado na prova final.',
       );
     }
 
-    // 4. Persistência (Garante que o registro do certificado existe)
-    // Se já existir, atualiza. Se não, cria.
+    // 4. Persistência
     const certificate = await this.prisma.certificate.upsert({
       where: { studentId_courseId: { studentId, courseId } },
       create: {
@@ -115,94 +114,67 @@ export class CertificatesService {
         issuedAt: new Date(),
       },
       update: {
-        // Se o aluno fez a prova de novo e tirou nota maior, atualizamos
         scorePercent: bestAttempt.scorePercent,
         attemptId: bestAttempt.id,
       },
     });
 
-    // 5. Buscar dados do Aluno para o PDF
+    // 5. Buscar dados do Aluno
     const student = await this.prisma.student.findUnique({
       where: { id: studentId },
       select: { fullName: true, cpf: true },
     });
 
     // =====================================================================
-    // MOCK DE DADOS (Layout Laena)
+    // TRATAMENTO DA IMAGEM (Usando process.cwd() para evitar erro de /dist)
     // =====================================================================
+    let logoBase64 = '';
+    try {
+      const imagePath = path.join(
+        process.cwd(),
+        'src',
+        'infra',
+        'images',
+        'image.png',
+      );
+      const imageBuffer = fs.readFileSync(imagePath);
+      logoBase64 = `data:image/png;base64,${imageBuffer.toString('base64')}`;
+    } catch (err) {
+      this.logger.error(
+        `Não foi possível carregar a logo em: src/infra/images/image.png - ${err.message}`,
+      );
+    }
 
+    // =====================================================================
+    // DADOS PARA O TEMPLATE
+    // =====================================================================
     const conclusionDate = enrollment.completedAt;
-
-    // Data Início: 5 dias antes
     const startDate = new Date(conclusionDate);
     startDate.setDate(startDate.getDate() - 5);
 
-    // Validade: 2 anos depois
     const expirationDate = new Date(conclusionDate);
     expirationDate.setFullYear(expirationDate.getFullYear() + 2);
 
-    const mockModules = [
-      {
-        name: 'I - Introdução à NR-35 e Conceitos Básicos',
-        score: 100,
-        hours: 5,
-        frequency: 100,
-        instructor: 'Jorgiano de Assis',
-      },
-      {
-        name: 'II - Análise de Risco e Condições Impeditivas',
-        score: 100,
-        hours: 5,
-        frequency: 100,
-        instructor: 'Jorgiano de Assis',
-      },
-      {
-        name: 'III - Equipamentos de Proteção e Sinalização',
-        score: 100,
-        hours: 10,
-        frequency: 100,
-        instructor: 'Jorgiano de Assis',
-      },
-      {
-        name: 'IV - Sistemas de Proteção Contra-Quedas',
-        score: 100,
-        hours: 10,
-        frequency: 100,
-        instructor: 'Jorgiano de Assis',
-      },
-      {
-        name: 'V - Fator de Queda, Riscos Potenciais',
-        score: 100,
-        hours: 10,
-        frequency: 100,
-        instructor: 'Jorgiano de Assis',
-      },
-      {
-        name: 'VI - Nó Utilizado em Acesso por Corda',
-        score: 100,
-        hours: 10,
-        frequency: 100,
-        instructor: 'Jorgiano de Assis',
-      },
-      {
-        name: 'VII - Emergência e Primeiros Socorros',
-        score: 100,
-        hours: 10,
-        frequency: 100,
-        instructor: 'Jorgiano de Assis',
-      },
-    ];
+    // Módulos dinâmicos: removido o mock.
+    // O próximo desenvolvedor deve mapear os módulos do curso aqui.
+    const modules: CertificateModule[] = [];
+
+    // Extrair número da NR automaticamente do título
+    const nrMatch = enrollment.course.title.match(/NR\s?(\d+)/i);
+    const nrNumber = nrMatch ? nrMatch[1] : '35';
 
     const templateData: CertificateData = {
       studentName: student?.fullName ?? 'Aluno',
       studentCpf: student?.cpf ?? '000.000.000-00',
       courseTitle: enrollment.course.title,
-      workloadHours: enrollment.course.workloadHours || 60,
+      nrNumber: nrNumber,
+      workloadHours: enrollment.course.workloadHours || 0,
       verificationCode: certificate.id,
       startDate: format(startDate, 'dd/MM/yyyy'),
       endDate: format(conclusionDate, 'dd/MM/yyyy'),
       expirationDate: format(expirationDate, 'dd/MM/yyyy'),
-      modules: mockModules,
+      modules: modules,
+      logoBase64: logoBase64,
     };
 
     const html = buildCertificateHtml(templateData);
