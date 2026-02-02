@@ -1,8 +1,8 @@
 export interface CertificateModule {
   name: string;
-  score?: number; // Opcional
-  hours?: number; // Opcional
-  frequency?: number; // Opcional
+  score?: number;
+  hours?: number;
+  frequency?: number;
   instructorName?: string;
   instructorCrea?: string;
 }
@@ -22,7 +22,9 @@ export interface CertificateData {
 }
 
 export const buildCertificateHtml = (data: CertificateData): string => {
-  // Gera as linhas apenas se houver módulos, caso contrário deixa a tabela limpa
+  const DEFAULT_INSTRUCTOR = 'Jorgiano De Assis Lage';
+  const DEFAULT_CREA = '385355';
+
   const tableRows = (data.modules || [])
     .map(
       (m) => `
@@ -34,10 +36,8 @@ export const buildCertificateHtml = (data: CertificateData): string => {
         m.frequency !== undefined ? `${m.frequency.toFixed(2)}%` : '---'
       }</td>
       <td>
-        ${m.instructorName || '---'}
-        ${
-          m.instructorCrea ? `<br><small>CREA: ${m.instructorCrea}</small>` : ''
-        }
+        ${m.instructorName || DEFAULT_INSTRUCTOR}<br>
+        <small>CREA: ${m.instructorCrea || DEFAULT_CREA}</small>
       </td>
     </tr>
   `,
