@@ -345,4 +345,40 @@ export class StudentsService {
       issuedAt: cert.issuedAt,
     };
   }
+
+  async getStudentLibrary(studentId: string) {
+  // 1) cursos matriculados
+  const enrollments = await this.prisma.studentCourseEnrollment.findMany({
+    where: { studentId },
+    include: { course: { select: { id: true, title: true } } },
+    orderBy: { enrolledAt: 'desc' },
+  });
+
+  if (!enrollments.length) return [];
+
+  const courseIds = enrollments.map(e => e.courseId);
+
+  // 2) itens da biblioteca desses cursos
+  const items = await this.prisma.libraryItem.findMany({
+    where: {
+      isActive: true,
+      courseId: { in: courseIds },
+    },
+    orderBy: { createdAt: 'desc' },
+  });
+
+  // 3) agrupar por curso
+  const byCourse = new Map<string, any[]>();
+  for (const it of items) {
+    const arr = byCourse.get(it.courseId) || [];
+    arr.push(it);
+    byCourse.set(it.courseId, arr);
+  }
+
+  return enrollments.map(e => ({
+    courseId: e.course.id,
+    courseTitle: e.course.title,
+    items: byCourse.get(e.course.id) || [],
+  }));
+}
 }

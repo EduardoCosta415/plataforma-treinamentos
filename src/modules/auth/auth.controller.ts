@@ -42,6 +42,6 @@ export class AuthController {
       throw new ForbiddenException('Acesso negado');
     }
 
-    return this.auth.changeStudentPassword(req.user.userId, dto.newPassword);
+    return this.auth.changeStudentPassword(req.user.sub, dto.newPassword);
   }
 }

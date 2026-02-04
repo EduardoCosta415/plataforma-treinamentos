@@ -7,7 +7,7 @@ services:
     restart: always
 
     ports:
-      - "5432:5432"
+      - "5433:5433"
 
     environment:
       POSTGRES_DB: plat_db

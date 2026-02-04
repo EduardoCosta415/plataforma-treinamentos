@@ -12,6 +12,7 @@ export class StudentCoursesService {
   async getCourse(studentId: string, courseId: string) {
     // 1️⃣ Verifica se o aluno está matriculado
     const enrollment = await this.prisma.studentCourseEnrollment.findUnique({
+      
       where: {
         studentId_courseId: {
           studentId,

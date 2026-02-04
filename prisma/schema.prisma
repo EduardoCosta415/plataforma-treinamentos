@@ -7,25 +7,17 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-enum UserRole {
-  ADMIN
-  OPERATOR
-  MANAGER
-  STUDENT
-}
-
 model Company {
-  id        String   @id @default(cuid())
+  id        String    @id @default(cuid())
   name      String
-  cnpj      String?  @unique
-  email     String?
+  cnpj      String?   @unique
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
   phone     String?
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  users    User[]
-  students Student[]
+  email     String?
+  isActive  Boolean   @default(true)
+  students  Student[]
+  users     User[]
 }
 
 model User {
@@ -34,134 +26,99 @@ model User {
   passwordHash String
   fullName     String
   role         UserRole @default(STUDENT)
-
-  companyId String?
-  company   Company? @relation(fields: [companyId], references: [id])
-
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  companyId    String?
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  company      Company? @relation(fields: [companyId], references: [id])
 }
 
 model Student {
-  id                 String  @id @default(cuid())
+  id                 String                    @id @default(cuid())
   fullName           String
-  email              String  @unique
-
-  // ✅ NOVO: CPF para certificado (opcional por enquanto)
-  cpf                String? @unique
-
+  email              String                    @unique
+  companyId          String
+  isActive           Boolean                   @default(true)
+  createdAt          DateTime                  @default(now())
+  updatedAt          DateTime                  @updatedAt
+  mustChangePassword Boolean                   @default(true)
   passwordHash       String
-  mustChangePassword Boolean @default(true)
-
-  companyId String
-  company   Company @relation(fields: [companyId], references: [id])
-
-  isActive Boolean @default(true)
-
-  lessonProgress StudentLessonProgress[]
-  enrollments    StudentCourseEnrollment[]
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  courses   StudentCourse[]
-
-  // ✅ NOVO (oposto)
-  examAttempts  StudentExamAttempt[]
-  certificates  Certificate[]
+  cpf                String?                   @unique
+  certificates       Certificate[]
+  company            Company                   @relation(fields: [companyId], references: [id])
+  courses            StudentCourse[]
+  enrollments        StudentCourseEnrollment[]
+  examAttempts       StudentExamAttempt[]
+  lessonProgress     StudentLessonProgress[]
 }
 
 model Course {
-  id          String  @id @default(cuid())
-  title       String
-  description String?
-  isActive    Boolean @default(true)
-  imageUrl    String?
-
-  // ✅ NOVO: carga horária total do curso (para certificado)
+  id            String                    @id @default(cuid())
+  title         String
+  description   String?
+  isActive      Boolean                   @default(true)
+  createdAt     DateTime                  @default(now())
+  updatedAt     DateTime                  @updatedAt
+  imageUrl      String?
   workloadHours Int?
-
-  modules Module[]
-
-  enrollments StudentCourseEnrollment[]
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  students  StudentCourse[]
-
-  // NOVOS (opostos)
-  libraryItems  LibraryItem[]
-  exam          Exam?
   certificates  Certificate[]
+  exam          Exam?
+  libraryItems  LibraryItem[]
+  modules       Module[]
+  students      StudentCourse[]
+  enrollments   StudentCourseEnrollment[]
 }
 
 model Module {
-  id    String @id @default(cuid())
-  title String
-  order Int
-
-  courseId String
-  course   Course @relation(fields: [courseId], references: [id])
-
-  // ✅ NOVO: carga horária do módulo (para tabela do certificado)
+  id            String   @id @default(cuid())
+  title         String
+  order         Int
+  courseId      String
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
   workloadHours Int?
-
-  lessons Lesson[]
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  lessons       Lesson[]
+  course        Course   @relation(fields: [courseId], references: [id])
 }
 
 model Lesson {
-  id       String  @id @default(cuid())
-  title    String
-  videoUrl String?
-  order    Int
-
-  moduleId String
-  module   Module @relation(fields: [moduleId], references: [id])
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id        String                  @id @default(cuid())
+  title     String
+  videoUrl  String?
+  order     Int
+  moduleId  String
+  createdAt DateTime                @default(now())
+  updatedAt DateTime                @updatedAt
+  module    Module                  @relation(fields: [moduleId], references: [id])
   progress  StudentLessonProgress[]
 }
 
 model StudentCourseEnrollment {
-  id String @id @default(cuid())
-
-  studentId String
-  student   Student @relation(fields: [studentId], references: [id])
-
-  courseId String
-  course   Course @relation(fields: [courseId], references: [id])
-
+  id          String    @id @default(cuid())
+  studentId   String
+  courseId    String
   status      String    @default("ACTIVE")
   enrolledAt  DateTime  @default(now())
   completedAt DateTime?
+  course      Course    @relation(fields: [courseId], references: [id])
+  student     Student   @relation(fields: [studentId], references: [id])
 
   @@unique([studentId, courseId])
 }
 
 model StudentLessonProgress {
-  id String @id @default(cuid())
-
-  studentId String
-  student   Student @relation(fields: [studentId], references: [id])
-
-  lessonId String
-  lesson   Lesson @relation(fields: [lessonId], references: [id])
-
-  completed   Boolean   @default(false)
-  completedAt DateTime?
-
-  // ✅ tracking do vídeo
-  watchedSeconds  Int     @default(0)
-  lastPosition    Int     @default(0)
-  durationSeconds Int     @default(0)
-  finishedVideo   Boolean @default(false)
-
-  // (opcional, mas recomendado se você quer "última atualização" no banco)
-  updatedAt DateTime @updatedAt
+  id              String    @id @default(cuid())
+  studentId       String
+  lessonId        String
+  completed       Boolean   @default(false)
+  completedAt     DateTime?
+  durationSeconds Int       @default(0)
+  finishedVideo   Boolean   @default(false)
+  lastPosition    Int       @default(0)
+  updatedAt       DateTime  @updatedAt
+  watchedSeconds  Int       @default(0)
+  lesson          Lesson    @relation(fields: [lessonId], references: [id])
+  student         Student   @relation(fields: [studentId], references: [id])
 
   @@unique([studentId, lessonId])
   @@index([studentId])
@@ -169,128 +126,111 @@ model StudentLessonProgress {
 }
 
 model StudentCourse {
-  id String @id @default(cuid())
-
+  id        String   @id @default(cuid())
   studentId String
   courseId  String
-
-  student Student @relation(fields: [studentId], references: [id])
-  course  Course  @relation(fields: [courseId], references: [id])
-
   createdAt DateTime @default(now())
+  course    Course   @relation(fields: [courseId], references: [id])
+  student   Student  @relation(fields: [studentId], references: [id])
 
   @@unique([studentId, courseId])
 }
 
 model LibraryItem {
-  id       String @id @default(cuid())
-  courseId String
-  course   Course @relation(fields: [courseId], references: [id])
-
-  title       String
-  description String?
-
-  fileUrl String
-  fileKey String?
-
+  id           String   @id @default(cuid())
+  courseId     String
+  title        String
+  description  String?
+  fileUrl      String
+  fileKey      String?
   originalName String?
   mimeType     String?
   sizeBytes    Int?
-
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  course       Course   @relation(fields: [courseId], references: [id])
 
   @@index([courseId])
 }
 
 model Exam {
-  id       String @id @default(cuid())
-  courseId String @unique
-  course   Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
-
+  id        String               @id @default(cuid())
+  courseId  String               @unique
   title     String
-  passScore Int     @default(70)
-  isActive  Boolean @default(true)
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
+  passScore Int                  @default(70)
+  isActive  Boolean              @default(true)
+  createdAt DateTime             @default(now())
+  updatedAt DateTime             @updatedAt
+  course    Course               @relation(fields: [courseId], references: [id], onDelete: Cascade)
   questions ExamQuestion[]
   attempts  StudentExamAttempt[]
 }
 
 model ExamQuestion {
-  id     String @id @default(cuid())
-  examId String
-  exam   Exam   @relation(fields: [examId], references: [id], onDelete: Cascade)
-
-  title String
-  order Int
-
+  id      String              @id @default(cuid())
+  examId  String
+  title   String
+  order   Int
   options ExamOption[]
+  exam    Exam                @relation(fields: [examId], references: [id], onDelete: Cascade)
   answers StudentExamAnswer[]
 }
 
 model ExamOption {
-  id         String       @id @default(cuid())
+  id         String              @id @default(cuid())
   questionId String
-  question   ExamQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
-
-  label     String
-  isCorrect Boolean @default(false)
-
-  answers StudentExamAnswer[]
+  label      String
+  isCorrect  Boolean             @default(false)
+  question   ExamQuestion        @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  answers    StudentExamAnswer[]
 }
 
 model StudentExamAttempt {
-  id     String @id @default(cuid())
-  examId String
-  exam   Exam   @relation(fields: [examId], references: [id], onDelete: Cascade)
-
-  studentId String
-  student   Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
-
+  id            String              @id @default(cuid())
+  examId        String
+  studentId     String
   attemptNumber Int
-  scorePercent  Int?
-  passed        Boolean   @default(false)
-  startedAt     DateTime  @default(now())
   finishedAt    DateTime?
-
-  answers StudentExamAnswer[]
+  passed        Boolean             @default(false)
+  scorePercent  Int?
+  startedAt     DateTime            @default(now())
+  answers       StudentExamAnswer[]
+  exam          Exam                @relation(fields: [examId], references: [id], onDelete: Cascade)
+  student       Student             @relation(fields: [studentId], references: [id], onDelete: Cascade)
 
   @@unique([studentId, examId, attemptNumber])
   @@index([studentId, examId])
 }
 
 model StudentExamAnswer {
-  id String @id @default(cuid())
-
-  attemptId String
-  attempt   StudentExamAttempt @relation(fields: [attemptId], references: [id], onDelete: Cascade)
-
+  id         String             @id @default(cuid())
+  attemptId  String
   questionId String
-  question   ExamQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
-
-  optionId String
-  option   ExamOption @relation(fields: [optionId], references: [id], onDelete: Cascade)
+  optionId   String
+  attempt    StudentExamAttempt @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  option     ExamOption         @relation(fields: [optionId], references: [id], onDelete: Cascade)
+  question   ExamQuestion       @relation(fields: [questionId], references: [id], onDelete: Cascade)
 }
 
 model Certificate {
-  id String @id @default(cuid())
-
-  studentId String
-  student   Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
-
-  courseId String
-  course   Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
-
-  attemptId    String? // opcional: qual tentativa gerou
+  id           String   @id @default(cuid())
+  studentId    String
+  courseId     String
+  attemptId    String?
   scorePercent Int
-
-  issuedAt DateTime @default(now())
+  issuedAt     DateTime @default(now())
+  course       Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  student      Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
 
   @@unique([studentId, courseId])
   @@index([studentId])
   @@index([courseId])
+}
+
+enum UserRole {
+  ADMIN
+  OPERATOR
+  MANAGER
+  STUDENT
 }
