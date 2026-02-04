@@ -54,22 +54,43 @@ export const buildCertificateHtml = (data: CertificateData): string => {
         body { margin: 0; padding: 0; font-family: 'Open Sans', sans-serif; -webkit-print-color-adjust: exact; }
         .page { width: 1123px; height: 794px; position: relative; background: white; overflow: hidden; page-break-after: always; display: flex; flex-direction: column; }
         :root { --gold-main: #D4AF37; --gold-dark: #B8860B; --brown-text: #5D4037; }
-        .curve-top-right { position: absolute; top: -80px; right: -80px; width: 350px; height: 350px; background: linear-gradient(135deg, #fff 30%, var(--gold-main) 60%, var(--brown-text) 100%); border-radius: 50%; z-index: 0; }
+        
+        /* Curva inferior mantida conforme solicitado */
         .curve-bottom-left { position: absolute; bottom: -120px; left: -80px; width: 400px; height: 400px; background: linear-gradient(45deg, var(--gold-main) 0%, #fff 70%); border-radius: 50%; z-index: 0; border: 15px solid var(--gold-dark); }
-        .nr-badge { position: absolute; top: 60px; left: 60px; width: 120px; height: 120px; background: #FFD700; transform: rotate(45deg); border: 4px solid #000; border-radius: 8px; display: flex; align-items: center; justify-content: center; z-index: 2; }
+        
+        /* NR Badge reposicionada para o canto superior direito */
+        .nr-badge { 
+          position: absolute; 
+          top: 60px; 
+          right: 60px; /* Mudado de left para right */
+          width: 120px; 
+          height: 120px; 
+          background: #FFD700; 
+          transform: rotate(45deg); 
+          border: 4px solid #000; 
+          border-radius: 8px; 
+          display: flex; 
+          align-items: center; 
+          justify-content: center; 
+          z-index: 2; 
+        }
         .nr-badge-content { transform: rotate(-45deg); font-weight: 900; font-size: 28px; text-align: center; color: #000; line-height: 1; }
         .nr-badge-content small { font-size: 14px; display: block; }
+        
         .front-container { padding: 40px 80px; position: relative; z-index: 1; height: 100%; display: flex; flex-direction: column; align-items: center; }
         .logo-img { height: 180px; width: auto; margin-bottom: 0px; }
         h1.cert-title { font-size: 72px; font-weight: 800; margin: 0px 0 30px 0; color: #000; text-transform: uppercase; letter-spacing: 2px; }
         .cert-body { font-size: 22px; line-height: 1.6; text-align: center; color: #333; width: 85%; }
         .bold { font-weight: 800; color: #000; }
+        
         .signatures { margin-top: auto; margin-bottom: 50px; width: 100%; display: flex; justify-content: space-around; }
         .sig-block { text-align: center; width: 35%; }
         .sig-line { border-top: 1.5px solid #000; margin-bottom: 8px; }
         .sig-role { font-weight: 700; font-size: 14px; text-transform: uppercase; color: #444; }
+        
         .back-container { padding: 60px 50px; position: relative; z-index: 1; }
         .watermark { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 120px; opacity: 0.04; font-weight: 900; color: var(--gold-dark); z-index: 0; pointer-events: none; }
+        
         table { width: 100%; border-collapse: collapse; font-size: 13px; background: rgba(255,255,255,0.9); }
         th, td { border: 1px solid #999; padding: 12px 8px; text-align: center; }
         th { background-color: #f2f2f2; font-weight: 800; text-transform: uppercase; }
@@ -78,11 +99,12 @@ export const buildCertificateHtml = (data: CertificateData): string => {
     </head>
     <body>
       <div class="page">
-        <div class="curve-top-right"></div>
         <div class="curve-bottom-left"></div>
-        <div class="nr-badge"><div class="nr-badge-content"><small>NR</small>${
-          data.nrNumber
-        }</div></div>
+        
+        <div class="nr-badge">
+          <div class="nr-badge-content"><small>NR</small>${data.nrNumber}</div>
+        </div>
+
         <div class="front-container">
           <img src="${data.logoBase64}" class="logo-img" alt="Logo">
           <h1 class="cert-title">Certificado</h1>
