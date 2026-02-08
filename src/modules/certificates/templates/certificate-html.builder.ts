@@ -19,6 +19,8 @@ export interface CertificateData {
   verificationCode: string;
   modules: CertificateModule[];
   logoBase64?: string;
+  directorName?: string;
+  engineerName?: string;
 }
 
 export const buildCertificateHtml = (data: CertificateData): string => {
@@ -50,19 +52,19 @@ export const buildCertificateHtml = (data: CertificateData): string => {
     <head>
       <meta charset="UTF-8">
       <style>
-        @import url('https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;600;700;800&display=swap');
+        /* Trocado para Alex Brush conforme solicitado */
+        @import url('https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;600;700;800&family=Alex+Brush&display=swap');
+        
         body { margin: 0; padding: 0; font-family: 'Open Sans', sans-serif; -webkit-print-color-adjust: exact; }
         .page { width: 1123px; height: 794px; position: relative; background: white; overflow: hidden; page-break-after: always; display: flex; flex-direction: column; }
         :root { --gold-main: #D4AF37; --gold-dark: #B8860B; --brown-text: #5D4037; }
         
-        /* Curva inferior mantida conforme solicitado */
         .curve-bottom-left { position: absolute; bottom: -120px; left: -80px; width: 400px; height: 400px; background: linear-gradient(45deg, var(--gold-main) 0%, #fff 70%); border-radius: 50%; z-index: 0; border: 15px solid var(--gold-dark); }
         
-        /* NR Badge reposicionada para o canto superior direito */
         .nr-badge { 
           position: absolute; 
           top: 60px; 
-          right: 60px; /* Mudado de left para right */
+          right: 60px; 
           width: 120px; 
           height: 120px; 
           background: #FFD700; 
@@ -84,7 +86,20 @@ export const buildCertificateHtml = (data: CertificateData): string => {
         .bold { font-weight: 800; color: #000; }
         
         .signatures { margin-top: auto; margin-bottom: 50px; width: 100%; display: flex; justify-content: space-around; }
-        .sig-block { text-align: center; width: 35%; }
+        .sig-block { text-align: center; width: 35%; position: relative; }
+        
+        /* Estilo da Assinatura com Alex Brush e proteção contra quebra de linha */
+        .signature-font {
+          font-family: 'Alex Brush', cursive;
+          font-size: 48px; /* Ajustado para Alex Brush que costuma ser um pouco menor */
+          color: #000;
+          margin-bottom: -10px;
+          display: block;
+          line-height: 1;
+          white-space: nowrap; /* IMPEDE A QUEBRA DE LINHA */
+          overflow: visible; /* Garante que se passar um pouco, não corte */
+        }
+
         .sig-line { border-top: 1.5px solid #000; margin-bottom: 8px; }
         .sig-role { font-weight: 700; font-size: 14px; text-transform: uppercase; color: #444; }
         
@@ -120,10 +135,25 @@ export const buildCertificateHtml = (data: CertificateData): string => {
             Treinamento realizado pela <span class="bold">LAENA - Centro de Treinamento e Capacitação de Segurança do Trabalho EAD Ltda</span>, 
             CNPJ 59.182.033/0001-42, sediada na Rua Uberlândia, nº 252, Sala 307, Centro, Ipatinga/MG.
           </div>
+          
           <div class="signatures">
-            <div class="sig-block"><div class="sig-line"></div><div class="sig-role">Diretora Geral</div></div>
-            <div class="sig-block"><div class="sig-line"></div><div class="sig-role">Engenheiro(a) Responsável</div></div>
+            <div class="sig-block">
+              <span class="signature-font">
+                ${data.directorName || 'Assinatura'}
+              </span>
+              <div class="sig-line"></div>
+              <div class="sig-role">Diretora Geral</div>
+            </div>
+
+            <div class="sig-block">
+              <span class="signature-font">
+                ${data.engineerName || 'Assinatura'}
+              </span>
+              <div class="sig-line"></div>
+              <div class="sig-role">Engenheiro(a) Responsável</div>
+            </div>
           </div>
+
         </div>
       </div>
       <div class="page">
