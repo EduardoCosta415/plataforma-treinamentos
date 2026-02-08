@@ -109,10 +109,9 @@ export class CertificatesService {
       select: { fullName: true, cpf: true },
     });
 
-    // 6. Tratamento da Imagem (Ponto crítico do caminho)
+    // 6. Tratamento da Imagem
     let logoBase64 = '';
     try {
-      // process.cwd() aponta para a raiz do projeto (onde fica o package.json)
       const imagePath = path.join(
         process.cwd(),
         'src',
@@ -154,6 +153,12 @@ export class CertificatesService {
       expirationDate: format(expirationDate, 'dd/MM/yyyy'),
       modules: modules,
       logoBase64: logoBase64,
+      // NOVOS CAMPOS: Deixe null ou undefined para usar o padrão "Assinatura"
+      // Futuramente, você pode buscar isso do banco (ex: enrollment.course.directorName)
+
+      ///AVISO , ao ajustar aqui deve colocar o enrollment.course.directorName e enrollment.course.enginnerName
+      directorName: undefined, // Vai aparecer "Assinatura" com fonte cursiva
+      engineerName: undefined,
     };
 
     const html = buildCertificateHtml(templateData);
