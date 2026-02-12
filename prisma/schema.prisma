@@ -74,6 +74,9 @@ model Course {
   students      StudentCourse[]
   enrollments   StudentCourseEnrollment[]
 
+  directorName String?
+  engineerName String?
+  
   // ✅ relations novas
   orderItems OrderItem[]
 }
@@ -111,8 +114,7 @@ model StudentCourseEnrollment {
   completedAt DateTime?
   course      Course    @relation(fields: [courseId], references: [id])
   student     Student   @relation(fields: [studentId], references: [id])
-  directorName String
-  engineerName String
+
   
   @@unique([studentId, courseId])
 }
