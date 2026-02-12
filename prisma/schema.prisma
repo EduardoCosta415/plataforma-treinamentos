@@ -51,7 +51,6 @@ model Student {
   examAttempts       StudentExamAttempt[]
   lessonProgress     StudentLessonProgress[]
   orders             Order[]
-
 }
 
 model Course {
@@ -112,7 +111,9 @@ model StudentCourseEnrollment {
   completedAt DateTime?
   course      Course    @relation(fields: [courseId], references: [id])
   student     Student   @relation(fields: [studentId], references: [id])
-
+  directorName String
+  engineerName String
+  
   @@unique([studentId, courseId])
 }
 
