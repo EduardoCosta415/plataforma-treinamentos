@@ -32,7 +32,6 @@ export class ProgressService {
 
     const currentTime = Math.max(0, Math.floor(dto.currentTime || 0));
 
-    // Upsert seguro com validação de inputs
     await this.prisma.studentLessonProgress.upsert({
       where: {
         studentId_lessonId: { studentId, lessonId },
@@ -97,7 +96,7 @@ export class ProgressService {
       const lessons = m.lessons.map((l) => {
         const p = map.get(l.id);
         const completed = !!p?.completed;
-        // Primeira aula livre, as próximas dependem da anterior
+
         const locked = !previousLessonDone;
         previousLessonDone = completed;
 
@@ -115,10 +114,6 @@ export class ProgressService {
     return { ...course, modules };
   }
 
-  /**
-   * Método principal de conclusão
-   * Agora blinda contra undefined/null studentId
-   */
   async completeLesson(studentId: string, lessonId: string) {
     if (!studentId) {
       this.logger.error(
@@ -155,14 +150,14 @@ export class ProgressService {
     const idx = allLessons.findIndex((l) => l.id === lessonId);
     if (idx === -1) throw new BadRequestException('Aula não pertence ao curso');
 
-    // ✅ Validação de Sequência (Não pode pular aulas)
+    // ✅ Não pode pular aulas
     const previousLessons = allLessons.slice(0, idx);
     if (previousLessons.length > 0) {
       const prevIds = previousLessons.map((l) => l.id);
 
       const prevDone = await this.prisma.studentLessonProgress.findMany({
         where: {
-          studentId, // Aqui studentId já está validado
+          studentId,
           lessonId: { in: prevIds },
           completed: true,
         },
@@ -179,7 +174,6 @@ export class ProgressService {
       }
     }
 
-    // ✅ UPSERT SEGURO: studentId e lessonId garantidos
     const result = await this.prisma.studentLessonProgress.upsert({
       where: {
         studentId_lessonId: { studentId, lessonId },
@@ -196,7 +190,6 @@ export class ProgressService {
       },
     });
 
-    // Tenta finalizar o curso (marcar enrollment)
     await this.tryFinishCourse(studentId, courseId);
 
     return result;
@@ -222,7 +215,6 @@ export class ProgressService {
     const finished = completedLessons >= totalLessons;
     if (!finished) return;
 
-    // Atualiza status da matrícula
     await this.prisma.studentCourseEnrollment.updateMany({
       where: { studentId, courseId },
       data: {

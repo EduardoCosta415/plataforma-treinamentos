@@ -24,6 +24,41 @@ export class CertificatesService {
     private readonly pdfGenerator: PdfGeneratorService,
   ) {}
 
+  // =========================
+  // HELPERS CPF
+  // =========================
+  private normalizeCpf(value: string) {
+    return (value || '').trim().replace(/\D/g, '');
+  }
+
+  private isValidCpf(cpf: string): boolean {
+    if (!cpf || cpf.length !== 11) return false;
+    if (/^(\d)\1{10}$/.test(cpf)) return false;
+
+    const calc = (base: string, factor: number) => {
+      let total = 0;
+      for (let i = 0; i < base.length; i++) {
+        total += Number(base[i]) * (factor - i);
+      }
+      const mod = total % 11;
+      return mod < 2 ? 0 : 11 - mod;
+    };
+
+    const d1 = calc(cpf.slice(0, 9), 10);
+    const d2 = calc(cpf.slice(0, 10), 11);
+
+    return d1 === Number(cpf[9]) && d2 === Number(cpf[10]);
+  }
+
+  private formatCpf(cpfDigits: string): string {
+    // espera 11 dígitos
+    if (!cpfDigits || cpfDigits.length !== 11) return cpfDigits;
+    return cpfDigits.replace(
+      /^(\d{3})(\d{3})(\d{3})(\d{2})$/,
+      '$1.$2.$3-$4',
+    );
+  }
+
   /**
    * Lista certificados JÁ emitidos.
    */
@@ -50,12 +85,33 @@ export class CertificatesService {
 
   /**
    * Gera o PDF com verificação rígida de requisitos.
+   * ✅ CPF obrigatório e válido para emitir certificado
    */
   public async generateCertificateWithPuppeteer(
     studentId: string,
     courseId: string,
   ): Promise<Buffer> {
-    // 1. Validar Matrícula e Dados do Curso
+    // 0) Buscar aluno e validar CPF (ANTES de gerar qualquer coisa)
+    const student = await this.prisma.student.findUnique({
+      where: { id: studentId },
+      select: { fullName: true, cpf: true },
+    });
+
+    if (!student) throw new NotFoundException('Aluno não encontrado.');
+
+    const cpfDigits = this.normalizeCpf(student.cpf || '');
+    if (!cpfDigits) {
+      throw new BadRequestException(
+        'CPF obrigatório para emitir certificado. Atualize seu cadastro.',
+      );
+    }
+    if (!this.isValidCpf(cpfDigits)) {
+      throw new BadRequestException(
+        'CPF inválido no cadastro. Corrija o CPF para emitir certificado.',
+      );
+    }
+
+    // 1) Validar Matrícula e Dados do Curso
     const enrollment = await this.prisma.studentCourseEnrollment.findUnique({
       where: { studentId_courseId: { studentId, courseId } },
       include: {
@@ -70,24 +126,27 @@ export class CertificatesService {
     });
 
     if (!enrollment) throw new NotFoundException('Matrícula não encontrada.');
-    if (!enrollment.completedAt)
+    if (!enrollment.completedAt) {
       throw new BadRequestException('Curso não concluído.');
+    }
 
-    // 2. Validar Existência da Prova
+    // 2) Validar Existência da Prova
     const examId = enrollment.course.exam?.id;
-    if (!examId)
+    if (!examId) {
       throw new BadRequestException('Este curso não possui prova configurada.');
+    }
 
-    // 3. Validar Aprovação na Prova
+    // 3) Validar Aprovação na Prova
     const bestAttempt = await this.prisma.studentExamAttempt.findFirst({
       where: { studentId, examId, passed: true },
       orderBy: { scorePercent: 'desc' },
     });
 
-    if (!bestAttempt)
+    if (!bestAttempt) {
       throw new BadRequestException('Aluno não aprovado na prova final.');
+    }
 
-    // 4. Persistência
+    // 4) Persistência
     const certificate = await this.prisma.certificate.upsert({
       where: { studentId_courseId: { studentId, courseId } },
       create: {
@@ -103,13 +162,7 @@ export class CertificatesService {
       },
     });
 
-    // 5. Buscar dados do Aluno
-    const student = await this.prisma.student.findUnique({
-      where: { id: studentId },
-      select: { fullName: true, cpf: true },
-    });
-
-    // 6. Tratamento da Imagem
+    // 5) Tratamento da Imagem
     let logoBase64 = '';
     try {
       const imagePath = path.join(
@@ -127,7 +180,7 @@ export class CertificatesService {
       );
     }
 
-    // 7. Preparação das Datas
+    // 6) Preparação das Datas
     const conclusionDate = enrollment.completedAt;
     const startDate = new Date(conclusionDate);
     startDate.setDate(startDate.getDate() - 5);
@@ -142,8 +195,10 @@ export class CertificatesService {
     const nrNumber = nrMatch ? nrMatch[1] : '35';
 
     const templateData: CertificateData = {
-      studentName: student?.fullName ?? 'Aluno',
-      studentCpf: student?.cpf ?? '000.000.000-00',
+      studentName: student.fullName ?? 'Aluno',
+      // ✅ sempre CPF válido e formatado
+      studentCpf: this.formatCpf(cpfDigits),
+
       courseTitle: enrollment.course.title,
       nrNumber: nrNumber,
       workloadHours: enrollment.course.workloadHours || 0,
@@ -153,11 +208,8 @@ export class CertificatesService {
       expirationDate: format(expirationDate, 'dd/MM/yyyy'),
       modules: modules,
       logoBase64: logoBase64,
-      // NOVOS CAMPOS: Deixe null ou undefined para usar o padrão "Assinatura"
-      // Futuramente, você pode buscar isso do banco (ex: enrollment.course.directorName)
 
-      ///AVISO , ao ajustar aqui deve colocar o enrollment.course.directorName e enrollment.course.enginnerName
-      directorName: undefined, // Vai aparecer "Assinatura" com fonte cursiva
+      directorName: undefined,
       engineerName: undefined,
     };
 

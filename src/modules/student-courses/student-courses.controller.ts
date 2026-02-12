@@ -12,7 +12,8 @@ export class StudentCoursesController {
    * Retorna a visão do aluno dentro do curso
    */
   @Get(':courseId')
-  getCourse(@Req() req, @Param('courseId') courseId: string) {
-    return this.service.getCourse(req.user.id, courseId);
+  getCourse(@Req() req: any, @Param('courseId') courseId: string) {
+    const studentId = req.user?.sub || req.user?.id; // ✅ garante compat
+    return this.service.getCourse(studentId, courseId);
   }
 }

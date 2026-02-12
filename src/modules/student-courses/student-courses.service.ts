@@ -1,4 +1,4 @@
-import { Injectable, ForbiddenException } from '@nestjs/common';
+import { Injectable, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../infra/prisma/prisma.service';
 
 @Injectable()
@@ -7,12 +7,13 @@ export class StudentCoursesService {
 
   /**
    * Retorna a visão do aluno dentro de um curso
-   * Essa função CENTRALIZA a regra de progressão
+   * ✅ Regra centralizada:
+   * - aluno precisa estar matriculado (StudentCourseEnrollment)
+   * - progressão linear de aulas
    */
   async getCourse(studentId: string, courseId: string) {
     // 1️⃣ Verifica se o aluno está matriculado
     const enrollment = await this.prisma.studentCourseEnrollment.findUnique({
-      
       where: {
         studentId_courseId: {
           studentId,
@@ -40,9 +41,17 @@ export class StudentCoursesService {
       },
     });
 
+    if (!course) {
+      throw new NotFoundException('Curso não encontrado');
+    }
+
     // 3️⃣ Busca progresso do aluno
     const progress = await this.prisma.studentLessonProgress.findMany({
       where: { studentId },
+      select: {
+        lessonId: true,
+        completed: true,
+      },
     });
 
     const completedLessons = new Set(
@@ -55,16 +64,18 @@ export class StudentCoursesService {
 
     // 4️⃣ Aplica regra de bloqueio/desbloqueio
     const modules = course.modules.map(module => ({
-      ...module,
+      id: module.id,
+      title: module.title,
+      order: module.order,
       lessons: module.lessons.map(lesson => {
         totalLessons++;
 
         const isCompleted = completedLessons.has(lesson.id);
-
         if (isCompleted) completedCount++;
 
         const lessonUnlocked = unlocked;
 
+        // trava a próxima se esta não foi concluída
         if (!isCompleted) {
           unlocked = false;
         }

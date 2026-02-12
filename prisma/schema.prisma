@@ -50,13 +50,20 @@ model Student {
   enrollments        StudentCourseEnrollment[]
   examAttempts       StudentExamAttempt[]
   lessonProgress     StudentLessonProgress[]
+  orders             Order[]
+
 }
 
 model Course {
-  id            String                    @id @default(cuid())
-  title         String
-  description   String?
-  isActive      Boolean                   @default(true)
+  id          String  @id @default(cuid())
+  title       String
+  description String?
+  isActive    Boolean @default(true)
+
+  //  pagamento
+  isPaid     Boolean @default(false)
+  priceCents Int? // ex: 19990 = R$199,90 (só quando isPaid = true)
+
   createdAt     DateTime                  @default(now())
   updatedAt     DateTime                  @updatedAt
   imageUrl      String?
@@ -67,6 +74,9 @@ model Course {
   modules       Module[]
   students      StudentCourse[]
   enrollments   StudentCourseEnrollment[]
+
+  // ✅ relations novas
+  orderItems OrderItem[]
 }
 
 model Module {
@@ -233,4 +243,87 @@ enum UserRole {
   OPERATOR
   MANAGER
   STUDENT
+}
+
+enum OrderStatus {
+  PENDING_PAYMENT
+  PAID
+  CANCELED
+  EXPIRED
+}
+
+enum BillingType {
+  PIX
+  CREDIT_CARD
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  CANCELED
+  OVERDUE
+  REFUNDED
+}
+
+model Order {
+  id         String      @id @default(cuid())
+  studentId  String
+  status     OrderStatus @default(PENDING_PAYMENT)
+  totalCents Int
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
+  expiresAt  DateTime?
+
+  student Student     @relation(fields: [studentId], references: [id])
+  items   OrderItem[]
+  payment Payment?
+}
+
+model OrderItem {
+  id             String @id @default(cuid())
+  orderId        String
+  courseId       String
+  unitPriceCents Int
+
+  order  Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  course Course @relation(fields: [courseId], references: [id])
+
+  @@unique([orderId, courseId])
+  @@index([orderId])
+  @@index([courseId])
+}
+
+model Payment {
+  id          String        @id @default(cuid())
+  orderId     String        @unique
+  billingType BillingType
+  status      PaymentStatus @default(PENDING)
+
+  // Asaas
+  provider          String  @default("ASAAS")
+  providerPaymentId String? @unique
+  checkoutSessionId String?
+  checkoutUrl       String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  order  Order          @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  events PaymentEvent[]
+}
+
+model PaymentEvent {
+  id                String   @id @default(cuid())
+  provider          String   @default("ASAAS")
+  eventType         String
+  providerEventId   String?  @unique
+  providerPaymentId String?
+  payload           Json
+  receivedAt        DateTime @default(now())
+
+  paymentId String?
+  payment   Payment? @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+
+  @@index([providerPaymentId])
+  @@index([paymentId])
 }

@@ -14,6 +14,7 @@ import { DashboardModule } from './modules/dashboard/dashboard.module';
 import { ExamsModule } from './modules/exams/exams.module';
 import { CertificatesModule } from './modules/certificates/certificates.module';
 import { LibraryModule } from './modules/library/library.module';
+import { CheckoutModule } from './modules/checkout/pagamento.module';
 
 @Module({
   imports: [
@@ -32,6 +33,7 @@ import { LibraryModule } from './modules/library/library.module';
     ExamsModule,
     CertificatesModule,
     LibraryModule,
+    CheckoutModule,
   ],
 })
 export class AppModule {}
