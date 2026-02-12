@@ -116,6 +116,8 @@ export class CertificatesService {
           select: {
             title: true,
             workloadHours: true,
+            directorName: true,
+            engineerName: true,
             exam: { select: { id: true, passScore: true } },
           },
         },
@@ -206,8 +208,8 @@ export class CertificatesService {
       modules: modules,
       logoBase64: logoBase64,
 
-      directorName: enrollment.course.directorName,
-      engineerName: enrollment.course.engineerName,
+      directorName: enrollment.course.directorName || 'Nome do Diretor',
+      engineerName: enrollment.course.engineerName || 'Nome do Engenheiro',
     };
 
     const html = buildCertificateHtml(templateData);

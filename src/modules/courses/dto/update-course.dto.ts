@@ -1,5 +1,12 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsOptional, IsString, MinLength, IsUrl, IsBoolean } from 'class-validator';
+import {
+  IsOptional,
+  IsString,
+  MinLength,
+  IsUrl,
+  IsBoolean,
+  MaxLength,
+} from 'class-validator';
 
 export class UpdateCourseDto {
   @ApiProperty({
@@ -38,4 +45,14 @@ export class UpdateCourseDto {
   @IsOptional()
   @IsBoolean()
   isActive?: boolean;
+
+  @IsString()
+  @MaxLength(255)
+  @IsOptional()
+  directorName: string;
+
+  @IsString()
+  @MaxLength(255)
+  @IsOptional()
+  engineerName: string;
 }

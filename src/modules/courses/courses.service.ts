@@ -42,6 +42,8 @@ export class CoursesService {
         title: dto.title,
         description: dto.description || null,
         imageUrl: dto.imageUrl || null,
+        directorName: dto.directorName || null,
+        engineerName: dto.engineerName || null,
       },
     });
   }
@@ -57,6 +59,8 @@ export class CoursesService {
         description: dto.description ?? undefined,
         imageUrl: dto.imageUrl ?? undefined,
         isActive: dto.isActive ?? undefined,
+        directorName: dto.directorName ?? undefined,
+        engineerName: dto.engineerName ?? undefined,
       },
     });
   }

@@ -1,15 +1,25 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsOptional, IsString, MinLength, IsUrl } from 'class-validator';
+import {
+  IsOptional,
+  IsString,
+  MinLength,
+  IsUrl,
+  MaxLength,
+} from 'class-validator';
 
 export class CreateCourseDto {
-  @ApiProperty({ description: 'Título do curso', example: 'NR-33 Espaços Confinados' })
+  @ApiProperty({
+    description: 'Título do curso',
+    example: 'NR-33 Espaços Confinados',
+  })
   @IsString()
   @MinLength(3)
   title: string;
 
   @ApiProperty({
     description: 'Descrição detalhada do curso',
-    example: 'Este curso aborda os requisitos de segurança para trabalhos em espaços confinados.',
+    example:
+      'Este curso aborda os requisitos de segurança para trabalhos em espaços confinados.',
     required: false,
   })
   @IsOptional()
@@ -24,4 +34,14 @@ export class CreateCourseDto {
   @IsOptional()
   @IsUrl()
   imageUrl?: string;
+
+  @IsString()
+  @MaxLength(255)
+  @IsOptional()
+  directorName: string;
+
+  @IsString()
+  @MaxLength(255)
+  @IsOptional()
+  engineerName: string;
 }
