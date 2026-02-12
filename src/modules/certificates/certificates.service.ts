@@ -53,10 +53,7 @@ export class CertificatesService {
   private formatCpf(cpfDigits: string): string {
     // espera 11 dígitos
     if (!cpfDigits || cpfDigits.length !== 11) return cpfDigits;
-    return cpfDigits.replace(
-      /^(\d{3})(\d{3})(\d{3})(\d{2})$/,
-      '$1.$2.$3-$4',
-    );
+    return cpfDigits.replace(/^(\d{3})(\d{3})(\d{3})(\d{2})$/, '$1.$2.$3-$4');
   }
 
   /**
@@ -209,8 +206,8 @@ export class CertificatesService {
       modules: modules,
       logoBase64: logoBase64,
 
-      directorName: undefined,
-      engineerName: undefined,
+      directorName: enrollment.course.directorName,
+      engineerName: enrollment.course.engineerName,
     };
 
     const html = buildCertificateHtml(templateData);
